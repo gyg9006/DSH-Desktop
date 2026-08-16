@@ -23,36 +23,50 @@ const webviewRef = ref<Electron.WebviewTag | null>(null)
 const webviewError = ref(false)
 const webviewKey = ref(0)
 
-/** 注入 dsh 侧边栏切换助手（结构性定位：含「新建会话」导航按钮的窄栏根容器）。
- *  同时：① 用 insertCSS 注入「隐藏」样式，在重渲染/刷新时提前生效（消除闪显）；
- *  ② MutationObserver 兜底：即使 dsh 重建侧边栏根节点，隐藏状态也会被重新应用。 */
+/** 隐藏 dsh 内置侧边栏的通用 CSS（不依赖动态类名，insertCSS 跨 reload 保留，页面加载早期即生效）。 */
+const DSH_RAIL_HIDE_CSS = `[class*="_root"]:has(button[aria-label*="新建会话"]) { display: none !important; }`
+
+/** 注入侧边栏隐藏 CSS（webview insertCSS 持久，reload 后依然生效 → 打开会话刷新时零闪显）。 */
+function injectRailHideCss(): void {
+  const wv = webviewRef.value
+  if (!wv) return
+  try {
+    wv.insertCSS(DSH_RAIL_HIDE_CSS)
+  } catch {
+    // 老版本 API 不支持时忽略
+  }
+}
+
+/** 注入 dsh 侧边栏隐藏（CSS 通用规则为主 + JS 兜底）。
+ *  insertCSS 的通用规则不依赖动态类名、跨 reload 保留，reload 后页面加载早期即隐藏 → 零闪显。 */
 function injectSidebarHelper(): void {
   const wv = webviewRef.value
   if (!wv) return
+  // 1. 注入通用隐藏 CSS（持久生效）
+  injectRailHideCss()
+  // 2. JS 兜底：立即隐藏 + 观察重建（处理用户开启侧边栏的情况）
   wv.executeJavaScript(`(() => {
-    if (window.__dshwSidebarHelper && window.__dshwSidebarHelper.root) return 'exists'
+    const visible = ${appStore.config?.showDshSidebar === true ? 'true' : 'false'}
+    if (window.__dshwSidebarHelper) {
+      window.__dshwSidebarHelper.set(${appStore.config?.showDshSidebar === true ? 'true' : 'false'})
+      return 'exists'
+    }
     const nav = [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || '').includes('新建会话'))
     if (!nav) return 'no-nav-yet'
     let el = nav
     let root = null
     while (el) {
       const cls = typeof el.className === 'string' ? el.className : ''
-      if (cls.includes('_root') && el.getBoundingClientRect().width < 150) { root = el; break }
+      if (cls.includes('_root')) { root = el; break }
       el = el.parentElement
     }
     if (!root) return 'no-root'
-    const railClass = (root.className || '').toString().split(' ')[0] || ''
-    let visible = false
-    if (window.__dshwSidebarHelper) visible = window.__dshwSidebarHelper.visible
-    const apply = () => { root.style.display = visible ? '' : 'none'; document.body.toggleAttribute('data-dshw-rail', !visible) }
-    window.__dshwSidebarHelper = {
-      root,
-      visible,
-      railClass,
-      set(v) { visible = !!v; apply(); return 'ok' }
+    const apply = () => {
+      // CSS 已隐藏；仅当用户显式开启时强制显示
+      root.style.setProperty('display', visible ? '' : 'none', 'important')
     }
+    window.__dshwSidebarHelper = { root, visible, railClass: '', set(v) { visible = !!v; apply(); return 'ok' } }
     apply()
-    // 前端重渲染重建根节点时保持隐藏
     const mo = new MutationObserver(() => {
       if (!document.contains(root)) {
         const nav2 = [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || '').includes('新建会话'))
@@ -60,10 +74,9 @@ function injectSidebarHelper(): void {
         let el2 = nav2
         while (el2) {
           const cls = typeof el2.className === 'string' ? el2.className : ''
-          if (cls.includes('_root') && el2.getBoundingClientRect().width < 150) { root = el2; break }
+          if (cls.includes('_root')) { root = el2; window.__dshwSidebarHelper.root = el2; apply(); break }
           el2 = el2.parentElement
         }
-        if (root) { window.__dshwSidebarHelper.root = root; apply() }
       }
     })
     mo.observe(document.body, { childList: true, subtree: true })
@@ -71,42 +84,30 @@ function injectSidebarHelper(): void {
   })()`)
     .then((r: unknown) => {
       const status = String(r ?? '')
-      if (status === 'ready' || status === 'exists') {
-        const show = appStore.config?.showDshSidebar === true
-        dshSidebarVisible.value = show
-        // insertCSS：隐藏样式提前生效（刷新/切视图时不再闪显 dsh 侧边栏）
-        wv.executeJavaScript(`(() => {
-          const cls = window.__dshwSidebarHelper ? window.__dshwSidebarHelper.railClass : ''
-          window.__dshwSidebarHelper ? window.__dshwSidebarHelper.set(${show ? 'true' : 'false'}) : null
-          return cls
-        })()`)
-          .then((cls: unknown) => {
-            const c = String(cls ?? '')
-            if (!c) return
-            try {
-              // 默认隐藏该栏；用户开启 dsh 侧边栏时通过属性撤销
-              const hideRule = show
-                ? `body[data-dshw-rail] .${c} { display: none !important; }`
-                : `.${c} { display: none !important; }`
-              wv.insertCSS(hideRule)
-            } catch {
-              // 老版本 API 不支持时忽略
-            }
-          })
-          .catch(() => undefined)
-      } else if (status === 'no-nav-yet' || status === 'no-root') {
+      dshSidebarVisible.value = appStore.config?.showDshSidebar === true
+      if (status === 'no-nav-yet' || status === 'no-root') {
         setTimeout(injectSidebarHelper, 800)
       }
     })
     .catch(() => undefined)
 }
 
-/** 切换 dsh 内置侧边栏显示状态（同步配置，重启会话后保持）。 */
+/** 切换 dsh 内置侧边栏显示状态（同步配置；CSS 规则在用户开启时移除隐藏）。 */
 async function toggleDshSidebar(): Promise<void> {
   const wv = webviewRef.value
   const show = !dshSidebarVisible.value
   dshSidebarVisible.value = show
   if (wv) {
+    // 用户开启 → 注入「显示」规则覆盖隐藏；关闭 → 移除覆盖规则恢复隐藏
+    try {
+      if (show) {
+        wv.insertCSS(`[class*="_root"]:has(button[aria-label*="新建会话"]) { display: flex !important; }`)
+      } else {
+        wv.insertCSS(DSH_RAIL_HIDE_CSS)
+      }
+    } catch {
+      /* 忽略 */
+    }
     wv.executeJavaScript(`window.__dshwSidebarHelper ? window.__dshwSidebarHelper.set(${show ? 'true' : 'false'}) : 'n/a'`).catch(() => undefined)
   }
   const result = await window.dshw.updateConfig({ showDshSidebar: show })

@@ -31,8 +31,16 @@ const revealed = reactive(new Set<string>())
 /** 正在获取模型列表的提供方路由 */
 const discovering = ref<string | null>(null)
 
+/** 加载失败时禁用保存，避免用空配置覆盖已有 apiKey */
+const loadFailed = ref(false)
+
 onMounted(async () => {
-  api.value = await window.dshw.getApiConfig()
+  try {
+    api.value = await window.dshw.getApiConfig()
+  } catch (error) {
+    loadFailed.value = true
+    ElMessage.error(`加载 API 配置失败：${error instanceof Error ? error.message : String(error)}`)
+  }
 })
 
 const proxyMode = computed({
@@ -65,11 +73,15 @@ function addProvider(): void {
 }
 
 async function removeProvider(route: string): Promise<void> {
-  await ElMessageBox.confirm(`删除提供方「${route}」？保存后 dsh 中对应的模型路由也会移除。`, '删除提供方', {
-    type: 'warning',
-    confirmButtonText: '删除',
-    cancelButtonText: '取消'
-  })
+  try {
+    await ElMessageBox.confirm(`删除提供方「${route}」？保存后 dsh 中对应的模型路由也会移除。`, '删除提供方', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return // 用户取消，静默返回
+  }
   ensureProviders()
   const next = { ...api.value.providers! }
   delete next[route]
@@ -141,8 +153,13 @@ async function testConnection(): Promise<void> {
   testing.value = true
   testResult.value = null
   try {
-    // 先保存再测试（保证主进程读到最新配置）
-    await window.dshw.setApiConfig(plainApiConfig())
+    // 先保存再测试（保证主进程读到最新配置）；保存失败则停止，避免测试旧配置误导
+    const saved = await window.dshw.setApiConfig(plainApiConfig())
+    if (!saved.ok) {
+      testResult.value = { ok: false, error: saved.error ?? '保存配置失败' }
+      ElMessage.error(testResult.value.error)
+      return
+    }
     testResult.value = await window.dshw.testApiConnection()
     if (testResult.value.ok) {
       ElMessage.success(`连接成功（${testResult.value.latencyMs ?? '-'} ms）`)
@@ -338,7 +355,7 @@ async function testConnection(): Promise<void> {
     </div>
 
     <div class="mt-6 flex items-center gap-3">
-      <el-button size="small" type="primary" :loading="saving" @click="save()">保存并同步到 dsh</el-button>
+      <el-button size="small" type="primary" :loading="saving" :disabled="loadFailed" @click="save()">保存并同步到 dsh</el-button>
       <span v-if="synced" class="text-xs text-green-600">✓ 已同步：dsh 对话界面 / Models 页即时生效</span>
     </div>
   </div>

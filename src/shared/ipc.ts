@@ -78,6 +78,12 @@ export const IPC = {
   LogsClear: 'logs:clear',
   LogsExport: 'logs:export',
   AppCheckUpdate: 'app:check-update',
+  AppUpdateSettingsGet: 'app:update-settings:get',
+  AppUpdateSettingsSet: 'app:update-settings:set',
+  AppUpdateDownload: 'app:update:download',
+  AppUpdateCancel: 'app:update:cancel',
+  AppUpdateApply: 'app:update:apply',
+  UpdateEvent: 'app:update:event',
   AppSetLoginItem: 'app:set-login-item',
   DialogChooseDirectory: 'dialog:choose-directory',
   DialogChooseFile: 'dialog:choose-file',
@@ -455,15 +461,6 @@ export interface LogsPayload {
   dsh: string[]
 }
 
-export interface AppVersionInfo {
-  appVersion: string
-  dshVersion: string | null
-  nodeVersion: string | null
-  gitVersion: string | null
-  electron: string
-  chrome: string
-}
-
 export interface SyncConfigPayload {
   remoteUrl?: string
   branch?: string
@@ -475,4 +472,58 @@ export interface SyncResultPayload {
   error?: string
   pushed?: number
   pulled?: number
+  /** true = 同步冲突（rebase 失败），UI 据此显示「以远端/本地为准」操作 */
+  conflict?: boolean
+}
+
+/** 更新模式：auto=自动检测并下载；manual=仅手动检查。 */
+export type UpdateMode = 'auto' | 'manual'
+
+export interface UpdateSettingsPayload {
+  mode: UpdateMode
+  /** 最近一次检查时间（ms） */
+  lastCheckAt?: number
+  /** 已检查到的远端版本（防止重复提示） */
+  lastVersion?: string
+}
+
+export interface UpdateCheckResultPayload {
+  ok: boolean
+  current: string
+  hasUpdate: boolean
+  latest?: string
+  message: string
+  notes?: string
+  /** 更新包（zip）的 asset id，下载时用 */
+  assetId?: number
+  /** 更新包文件名 */
+  assetName?: string
+  /** 更新包大小（字节） */
+  size?: number
+  /** 下载地址（GitHub 网页地址，仅展示用） */
+  downloadUrl?: string
+}
+
+export type UpdateEventPhase =
+  | 'checking'
+  | 'found'
+  | 'none'
+  | 'downloading'
+  | 'downloaded'
+  | 'applying'
+  | 'error'
+
+export interface UpdateEventPayload {
+  phase: UpdateEventPhase
+  percent?: number
+  message?: string
+  version?: string
+  error?: string
+}
+
+export interface UpdateDownloadResultPayload {
+  ok: boolean
+  canceled?: boolean
+  path?: string
+  error?: string
 }

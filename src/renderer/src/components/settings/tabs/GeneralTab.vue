@@ -19,13 +19,18 @@ const saved = ref(false)
 const loaded = ref(false)
 
 onMounted(async () => {
-  const data = await window.dshw.getDshUiSettings()
-  locale.value = data.locale
-  theme.value = data.theme
-  preset.value = data.defaultAgentPreset
-  presets.value = data.presets
-  showDshSidebar.value = data.showDshSidebar
-  loaded.value = true
+  try {
+    const data = await window.dshw.getDshUiSettings()
+    locale.value = data.locale
+    theme.value = data.theme
+    preset.value = data.defaultAgentPreset
+    presets.value = data.presets
+    showDshSidebar.value = data.showDshSidebar
+    loaded.value = true
+  } catch (error) {
+    // 加载失败：保持表单隐藏且保存按钮禁用，避免用默认值覆盖真实配置
+    ElMessage.error(`加载通用设置失败：${error instanceof Error ? error.message : String(error)}`)
+  }
 })
 
 async function save(): Promise<void> {
@@ -125,7 +130,7 @@ async function openSettingsFile(): Promise<void> {
     </div>
 
     <div class="mt-6 flex items-center gap-3">
-      <el-button size="small" type="primary" :loading="saving" @click="save()">保存并同步到 dsh</el-button>
+      <el-button size="small" type="primary" :loading="saving" :disabled="!loaded" @click="save()">保存并同步到 dsh</el-button>
       <el-button size="small" plain :icon="Document" @click="openSettingsFile()">打开配置文件</el-button>
       <span v-if="saved" class="text-xs text-green-600">✓ 已同步：dsh 网页端即时生效</span>
     </div>

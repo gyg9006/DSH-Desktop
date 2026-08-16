@@ -9,11 +9,12 @@
 import { app, dialog, globalShortcut, Menu } from 'electron'
 import { initializeRuntime, getWorkspaceDir, getEffectiveTheme, redirectUserDataPaths, readAppConfig } from './config'
 import { logger } from './logger'
-import { createMainWindow, getMainWindow, setMinimizeToTrayHandler } from './window'
+import { createMainWindow, getMainWindow } from './window'
 import { registerIpcHandlers, broadcastUiEvent } from './ipc'
 import { stopDshService, isServiceRunning, startDshService, onServiceStatusChange } from './dshService'
 import { ensureTray, refreshTrayMenu } from './tray'
 import { scheduleAutoBackup } from './backup'
+import { scheduleAutoUpdate, stopAutoUpdateSchedule } from './updater'
 
 app.setName('DSH 桌面')
 app.setAppUserModelId('com.dshworkbench.app')
@@ -68,12 +69,14 @@ if (!gotLock) {
 
     registerIpcHandlers()
     registerGlobalShortcuts()
-    ensureTray(() => getMainWindow())
-    setMinimizeToTrayHandler(() => {
-      // 已隐藏到托盘（ensureTray 已创建托盘；点击托盘图标可恢复）
-      if (getMainWindow()) {
-        // 通知渲染层（可选）
+    // 托盘取窗口时若已被销毁则重建（规格 8.3：托盘可随时恢复主窗口）
+    ensureTray(() => {
+      let win = getMainWindow()
+      if (!win || win.isDestroyed()) {
+        createMainWindow(getWorkspaceDir(), getEffectiveTheme())
+        win = getMainWindow()
       }
+      return win
     })
 
     if (BACKGROUND_MODE) {
@@ -90,8 +93,22 @@ if (!gotLock) {
     const theme = getEffectiveTheme()
     createMainWindow(workspaceDir, theme)
 
+    // 关闭窗口不退出应用：隐藏到托盘继续驻留（服务与数据仍在后台）。
+    // 在窗口 close 事件里拦截（hide 而非销毁）；真正的退出走托盘「退出」菜单。
+    // 注意：必须在 createMainWindow 之后注册（此前 getMainWindow() 为 null，拦截会静默失效）。
+    const win = getMainWindow()
+    win?.on('close', (e) => {
+      if (!quitting) {
+        e.preventDefault()
+        win.hide()
+      }
+    })
+
     // 自动备份调度（规格 6.22）
     scheduleAutoBackup(workspaceDir)
+
+    // 版本更新调度（auto 模式：启动 10 秒后 + 每 6 小时检查）
+    scheduleAutoUpdate()
 
     app.on('activate', () => {
       if (!getMainWindow()) createMainWindow(getWorkspaceDir(), getEffectiveTheme())
@@ -106,15 +123,6 @@ if (!gotLock) {
   // 退出时优雅关闭 dsh 服务（正常终止，宽限 3 秒后强制，规格 4.5）
   let quitting = false
 
-  // 关闭窗口不退出应用：隐藏到托盘继续驻留（服务与数据仍在后台）。
-  // 在窗口 close 事件里拦截（hide 而非销毁）；真正的退出走托盘「退出」菜单。
-  const win = getMainWindow()
-  win?.on('close', (e) => {
-    if (!quitting) {
-      e.preventDefault()
-      win.hide()
-    }
-  })
   app.on('window-all-closed', () => {
     // 不退出：桌面端常驻托盘（最小化/关闭均隐藏）
   })
@@ -129,6 +137,7 @@ if (!gotLock) {
   })
 
   app.on('will-quit', () => {
+    stopAutoUpdateSchedule()
     globalShortcut.unregisterAll()
     logger.info('应用退出')
   })

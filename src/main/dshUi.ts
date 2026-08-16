@@ -8,8 +8,9 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import yaml from 'js-yaml'
 import { logger } from './logger'
+import { loadYamlObject, dumpYaml } from '../shared/yaml'
+import { readJsonFile, writeJsonAtomic } from '../shared/workspace'
 import type { AgentPresetInfo, DshUiSettingsPayload } from '../shared/ipc'
 
 const SHIPPED_PRESETS_ROOT = ['runtime', 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'config', 'agent-presets']
@@ -34,29 +35,19 @@ function readShowDshSidebar(workspaceDir: string): boolean {
   }
 }
 
-/** 写应用配置 showDshSidebar（合并保留其它键，白名单语义由调用方保证）。 */
+/** 写应用配置 showDshSidebar（合并保留其它键，白名单语义由调用方保证；原子写）。 */
 function writeShowDshSidebar(workspaceDir: string, value: boolean): void {
   const p = appConfigPath(workspaceDir)
   fs.mkdirSync(path.dirname(p), { recursive: true })
-  let current: Record<string, unknown> = {}
-  try {
-    if (fs.existsSync(p)) current = JSON.parse(fs.readFileSync(p, 'utf8')) as Record<string, unknown>
-  } catch {
-    // 损坏时从空配置重建
-  }
+  const current = (readJsonFile(p) ?? {}) as Record<string, unknown>
   current.showDshSidebar = value
-  fs.writeFileSync(p, JSON.stringify(current, null, 2), 'utf8')
+  writeJsonAtomic(p, current)
 }
 
 function readSettingsDoc(workspaceDir: string): Record<string, unknown> {
   const p = settingsPath(workspaceDir)
   if (!fs.existsSync(p)) return {}
-  try {
-    const parsed = yaml.load(fs.readFileSync(p, 'utf8'))
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
-  } catch {
-    return {}
-  }
+  return loadYamlObject(fs.readFileSync(p, 'utf8')) ?? {}
 }
 
 function str(v: unknown): string | undefined {
@@ -80,7 +71,7 @@ export function listAgentPresets(workspaceDir: string): AgentPresetInfo[] {
       const metaPath = path.join(dir, 'preset.yml')
       if (fs.existsSync(metaPath)) {
         try {
-          const meta = yaml.load(fs.readFileSync(metaPath, 'utf8')) as { name?: unknown; description?: unknown } | null
+          const meta = loadYamlObject(fs.readFileSync(metaPath, 'utf8'))
           name = str(meta?.name) ?? entry.name
           description = str(meta?.description)
         } catch {
@@ -130,7 +121,7 @@ export function mergeSettingsNamespaces(
   text: string | undefined,
   sections: Record<string, Record<string, unknown>>
 ): string {
-  const existing: Record<string, unknown> = text && text.trim() ? ((yaml.load(text) as Record<string, unknown>) ?? {}) : {}
+  const existing = loadYamlObject(text) ?? {}
   const merged: Record<string, unknown> = { ...existing }
   for (const [ns, fields] of Object.entries(sections)) {
     const prev = existing[ns] && typeof existing[ns] === 'object' && !Array.isArray(existing[ns])
@@ -138,7 +129,7 @@ export function mergeSettingsNamespaces(
       : {}
     merged[ns] = { ...prev, ...fields }
   }
-  return yaml.dump(merged, { lineWidth: -1, noRefs: true, noCompatMode: true, sortKeys: false })
+  return dumpYaml(merged)
 }
 
 /** 保存通用设置：写 settings.yaml 命名空间 + 应用配置（showDshSidebar）。 */

@@ -30,6 +30,11 @@ export const useMigrateStore = defineStore('migrate', {
       this.scanning = true
       try {
         this.sources = await window.dshw.scanDshData()
+      } catch (error) {
+        // 扫描失败保持空列表并提示（避免 unhandled rejection）
+        this.sources = []
+        console.warn('[migrate] 扫描存量数据失败', error)
+        this.pushLog(`扫描失败：${error instanceof Error ? error.message : String(error)}`)
       } finally {
         this.scanning = false
       }

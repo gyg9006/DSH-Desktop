@@ -12,29 +12,40 @@ const config = ref<SyncConfigPayload>({})
 const counts = ref({ local: 0, remote: 0 })
 const busy = ref('') // '', 'push', 'pull', 'forceRemote', 'forceLocal'
 const resultMsg = ref('')
+const conflict = ref(false)
 
 onMounted(() => {
   void refresh()
 })
 
 async function refresh(): Promise<void> {
-  const data = await window.dshw.getSyncConfig()
-  config.value = data.config
-  counts.value = data.counts
+  try {
+    const data = await window.dshw.getSyncConfig()
+    config.value = data.config
+    counts.value = data.counts
+  } catch (error) {
+    ElMessage.error(`读取同步配置失败：${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 async function save(): Promise<void> {
-  const result = await window.dshw.setSyncConfig({
-    remoteUrl: config.value.remoteUrl?.trim() || undefined,
-    branch: config.value.branch?.trim() || 'main'
-  })
-  if (result.ok) ElMessage.success('同步配置已保存')
+  try {
+    const result = await window.dshw.setSyncConfig({
+      remoteUrl: config.value.remoteUrl?.trim() || undefined,
+      branch: config.value.branch?.trim() || 'main'
+    })
+    if (result.ok) ElMessage.success('同步配置已保存')
+    else ElMessage.error(result.error ?? '保存失败')
+  } catch (error) {
+    ElMessage.error(`保存失败：${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 async function doAction(action: 'push' | 'pull' | 'forceRemote' | 'forceLocal'): Promise<void> {
   if (busy.value) return
   busy.value = action
   resultMsg.value = ''
+  conflict.value = false
   try {
     let result
     if (action === 'push') result = await window.dshw.syncPush()
@@ -48,7 +59,9 @@ async function doAction(action: 'push' | 'pull' | 'forceRemote' | 'forceLocal'):
       ElMessage.success(resultMsg.value)
     } else {
       resultMsg.value = result.error ?? '同步失败'
-      ElMessage.error(resultMsg.value)
+      conflict.value = result.conflict === true
+      if (conflict.value) ElMessage.warning('检测到同步冲突，请选择处理方式')
+      else ElMessage.error(resultMsg.value)
     }
     await refresh()
   } finally {
@@ -136,11 +149,11 @@ const lastSyncText = computed(() => {
             刷新
           </el-button>
         </div>
-        <p v-if="resultMsg" class="mt-2 break-all text-xs" :class="resultMsg.includes('失败') || resultMsg.includes('冲突') ? 'text-red-500' : 'text-green-600'">
+        <p v-if="resultMsg" class="mt-2 break-all text-xs" :class="conflict ? 'text-amber-600' : resultMsg.includes('失败') ? 'text-red-500' : 'text-green-600'">
           {{ resultMsg }}
         </p>
 
-        <div v-if="resultMsg.includes('冲突')" class="mt-2 rounded bg-amber-50 p-2.5 text-xs dark:bg-[#2A2415]">
+        <div v-if="conflict" class="mt-2 rounded bg-amber-50 p-2.5 text-xs dark:bg-[#2A2415]">
           <p class="text-amber-600 dark:text-amber-400">检测到同步冲突（两端都修改了会话），请选择处理方式：</p>
           <div class="mt-2 flex gap-2">
             <el-button size="small" type="danger" plain @click="confirmForce('remote')">以远端为准</el-button>

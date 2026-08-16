@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { clearBusinessData } from '../reset'
-import { syncSessionCount } from '../sync'
+import { syncSessionCount, isValidRemoteUrl, pruneMissing } from '../sync'
 
 const tempDirs: string[] = []
 
@@ -72,5 +72,59 @@ describe('syncSessionCount（同步会话统计）', () => {
     const counts = syncSessionCount(ws)
     expect(counts.local).toBe(2)
     expect(counts.remote).toBe(1)
+  })
+})
+
+describe('pruneMissing（同步删除对齐：已删会话不复活）', () => {
+  it('删除目标侧「源侧已不存在」的会话目录，保留双方共有', () => {
+    const src = makeTempDir()
+    const dest = makeTempDir()
+    const mkSession = (root: string, group: string, id: string): void => {
+      const dir = path.join(root, group, id)
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'session.jsonl'), 'x')
+    }
+    mkSession(src, '--g1--', 'keep')
+    mkSession(src, '--g1--', 'kept2')
+    mkSession(dest, '--g1--', 'keep')
+    mkSession(dest, '--g1--', 'deleted-remote')
+    mkSession(dest, '--g2--', 'orphan-group')
+
+    const removed = pruneMissing(src, dest)
+    expect(removed).toBe(2) // deleted-remote + 整个 orphan-group
+    expect(fs.existsSync(path.join(dest, '--g1--', 'keep'))).toBe(true)
+    expect(fs.existsSync(path.join(dest, '--g1--', 'deleted-remote'))).toBe(false)
+    expect(fs.existsSync(path.join(dest, '--g2--'))).toBe(false)
+  })
+
+  it('源侧为空目录时清空目标侧（全部删除）', () => {
+    const src = makeTempDir()
+    const dest = makeTempDir()
+    fs.mkdirSync(path.join(dest, '--g--', 'sid'), { recursive: true })
+    const removed = pruneMissing(src, dest)
+    expect(removed).toBe(1)
+    expect(fs.readdirSync(dest)).toHaveLength(0)
+  })
+
+  it('目标侧不存在时返回 0（不抛错）', () => {
+    const src = makeTempDir()
+    expect(pruneMissing(src, path.join(src, 'nope'))).toBe(0)
+  })
+})
+
+describe('isValidRemoteUrl（同步远端地址校验）', () => {
+  it('接受 http/https/ssh/git 协议', () => {
+    expect(isValidRemoteUrl('https://github.com/a/b.git')).toBe(true)
+    expect(isValidRemoteUrl('http://192.168.1.5/repo.git')).toBe(true)
+    expect(isValidRemoteUrl('ssh://git@github.com/a/b.git')).toBe(true)
+    expect(isValidRemoteUrl('git://host/repo.git')).toBe(true)
+  })
+
+  it('拒绝前导 -、非法协议与空值', () => {
+    expect(isValidRemoteUrl('--registry=https://evil')).toBe(false)
+    expect(isValidRemoteUrl('file:///c:/x')).toBe(false)
+    expect(isValidRemoteUrl('C:\\repo')).toBe(false)
+    expect(isValidRemoteUrl('')).toBe(false)
+    expect(isValidRemoteUrl('   ')).toBe(false)
   })
 })

@@ -23,13 +23,6 @@ interface WindowState {
   maximized?: boolean
 }
 
-/** 最小化到托盘（规格 8.3）回调，由 index.ts 注入。 */
-let onMinimizeToTray: (() => void) | null = null
-
-export function setMinimizeToTrayHandler(handler: (() => void) | null): void {
-  onMinimizeToTray = handler
-}
-
 let mainWindow: BrowserWindow | null = null
 
 export function getMainWindow(): BrowserWindow | null {
@@ -131,12 +124,9 @@ export function createMainWindow(workspaceDir: string, theme: ThemeMode): Browse
   win.on('resize', scheduleSave)
   win.on('move', scheduleSave)
 
-  // 最小化到托盘（规格 8.3）
+  // 最小化到托盘（规格 8.3：最小化即隐藏窗口，任务栏不保留图标；托盘恢复）
   win.on('minimize', () => {
-    if (onMinimizeToTray) {
-      onMinimizeToTray()
-      win.hide()
-    }
+    win.hide()
   })
   win.on('close', () => {
     if (saveTimer) clearTimeout(saveTimer)

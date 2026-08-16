@@ -36,7 +36,7 @@ import { validateWorkspacePath, writeJsonAtomic, readJsonFile } from '../shared/
 import { startDshService, stopDshService, getServiceSnapshot, onServiceStatusChange, cleanupStaleDsh } from './dshService'
 import { listSessions, pinSession, deleteSession, importSessionsFrom, expandImportArchives } from './sessions'
 import { resetApp } from './reset'
-import { readSyncConfig, writeSyncConfig, syncPush, syncPull, syncForceRemote, syncForceLocal, syncSessionCount } from './sync'
+import { readSyncConfig, writeSyncConfig, syncPush, syncPull, syncForceRemote, syncForceLocal, syncSessionCount, isValidRemoteUrl } from './sync'
 import { readApiConfig, writeApiConfig, testApiConnection, discoverModels, syncApiToDsh, MODEL_LIST, validateProvider } from './apiConfig'
 import {
   getPluginStates,
@@ -44,7 +44,8 @@ import {
   listInstalledPlugins,
   searchNpmPlugins,
   installPlugin,
-  uninstallPlugin
+  uninstallPlugin,
+  isValidPkgSpec
 } from './plugins'
 import { skillMarketItems, installSkill, listInstalledSkills, CURATED_SKILLS } from './skillsMarket'
 import { readUiSettings, writeUiSettings } from './dshUi'
@@ -74,31 +75,42 @@ import {
   writeBackupSettings
 } from './backup'
 import { readAppLog, readDshLog, clearLogs, exportLogsZip } from './logs'
+import {
+  checkForUpdate,
+  downloadUpdate,
+  cancelUpdateDownload,
+  applyUpdate,
+  readUpdateSettings,
+  writeUpdateSettings,
+  setUpdateEventBroadcast
+} from './updater'
 import type {
   ApiConfigPayload,
   BackupSettingsPayload,
-  SyncConfigPayload
+  SyncConfigPayload,
+  UpdateEventPayload,
+  UpdateSettingsPayload
 } from '../shared/ipc'
 
-export function broadcastUiEvent(type: UiEventType, target?: BrowserWindow): void {
+/** 向主窗口推送 IPC 事件（窗口未就绪/已销毁时静默跳过）。 */
+export function broadcast(channel: string, payload: unknown, target?: BrowserWindow): void {
   const win = target ?? getMainWindow()
   if (win && !win.isDestroyed()) {
-    win.webContents.send(IPC.UiEvent, type)
+    win.webContents.send(channel, payload)
   }
+}
+
+/** 向主窗口推送 UI 事件（全局快捷键触发）。 */
+export function broadcastUiEvent(type: UiEventType, target?: BrowserWindow): void {
+  broadcast(IPC.UiEvent, type, target)
 }
 
 function broadcastInstallEvent(event: InstallEvent): void {
-  const win = getMainWindow()
-  if (win && !win.isDestroyed()) {
-    win.webContents.send(IPC.InstallEvent, event)
-  }
+  broadcast(IPC.InstallEvent, event)
 }
 
 function broadcastMigrateEvent(event: MigrateEvent): void {
-  const win = getMainWindow()
-  if (win && !win.isDestroyed()) {
-    win.webContents.send(IPC.MigrateEvent, event)
-  }
+  broadcast(IPC.MigrateEvent, event)
 }
 
 export function registerIpcHandlers(): void {
@@ -106,7 +118,7 @@ export function registerIpcHandlers(): void {
     const config = readAppConfig()
     return {
       appName: 'DSH 桌面',
-      appVersion: process.env.npm_package_version ?? '0.1.0',
+      appVersion: app.getVersion(),
       electron: process.versions.electron,
       chrome: process.versions.chrome,
       node: process.versions.node,
@@ -422,6 +434,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.PluginInstall, async (_event, pkgSpec: string) => {
     const spec = String(pkgSpec ?? '').trim()
     if (!spec) return { ok: false, error: '缺少包名' }
+    if (!isValidPkgSpec(spec)) return { ok: false, error: '包名格式非法' }
     const lines: string[] = []
     const result = await installPlugin(getWorkspaceDir(), spec, {
       log: (chunk) => {
@@ -435,6 +448,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.PluginUninstall, async (_event, pkgName: string) => {
     const name = String(pkgName ?? '').trim()
     if (!name) return { ok: false, error: '缺少包名' }
+    if (!isValidPkgSpec(name)) return { ok: false, error: '包名格式非法' }
     const lines: string[] = []
     const result = await uninstallPlugin(getWorkspaceDir(), name, {
       log: (chunk) => {
@@ -633,10 +647,42 @@ export function registerIpcHandlers(): void {
     return exported
   })
 
-  // ---------- M5：关于（Tab6） ----------
-  ipcMain.handle(IPC.AppCheckUpdate, async () => {
-    // 当前为本地构建版本；未来可对接更新源（UPDATE_FEED_URL 可配置）
-    return { ok: true, current: app.getVersion(), hasUpdate: false, message: '当前为最新版本' }
+  // ---------- M5：关于 ----------
+  // 更新事件广播（updater 模块注入）
+  setUpdateEventBroadcast((event: UpdateEventPayload) => {
+    broadcast(IPC.UpdateEvent, event)
+  })
+
+  ipcMain.handle(IPC.AppCheckUpdate, async (_event, force = false) => {
+    return checkForUpdate({ force: force === true })
+  })
+
+  ipcMain.handle(IPC.AppUpdateSettingsGet, () => readUpdateSettings())
+
+  ipcMain.handle(IPC.AppUpdateSettingsSet, (_event, patch: Partial<UpdateSettingsPayload>) => {
+    const safe: Partial<UpdateSettingsPayload> = {}
+    if (patch?.mode === 'auto' || patch?.mode === 'manual') safe.mode = patch.mode
+    const next = writeUpdateSettings(safe)
+    return { ok: true, settings: next }
+  })
+
+  ipcMain.handle(IPC.AppUpdateDownload, async (_event, assetId: number) => {
+    if (!Number.isInteger(assetId) || assetId <= 0) return { ok: false, error: '更新包参数无效' }
+    return downloadUpdate(assetId)
+  })
+
+  ipcMain.handle(IPC.AppUpdateCancel, () => cancelUpdateDownload())
+
+  ipcMain.handle(IPC.AppUpdateApply, async (_event, zipPath: string) => {
+    const result = applyUpdate(String(zipPath ?? ''))
+    if (result.ok) {
+      // 停止服务并退出，交由 update.bat 完成替换与重启
+      await stopDshService()
+      const win = getMainWindow()
+      if (win) win.destroy()
+      app.exit(0)
+    }
+    return result
   })
 
   ipcMain.handle(IPC.AppSetLoginItem, (_event, enabled: boolean) => {
@@ -678,7 +724,12 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.SyncSet, (_event, patch: SyncConfigPayload) => {
     const safe: SyncConfigPayload = {}
-    if (typeof patch?.remoteUrl === 'string') safe.remoteUrl = patch.remoteUrl
+    if (typeof patch?.remoteUrl === 'string') {
+      if (!isValidRemoteUrl(patch.remoteUrl)) {
+        return { ok: false, config: readSyncConfig(), error: '远端地址需为 http(s)://、ssh:// 或 git:// 开头的合法 URL' }
+      }
+      safe.remoteUrl = patch.remoteUrl.trim()
+    }
     if (typeof patch?.branch === 'string' && /^[\w.-]+$/.test(patch.branch)) safe.branch = patch.branch
     const next = writeSyncConfig(safe)
     return { ok: true, config: next }

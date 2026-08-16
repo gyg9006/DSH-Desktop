@@ -19,17 +19,30 @@ onMounted(() => {
 })
 
 async function refresh(): Promise<void> {
-  backups.value = await window.dshw.listBackups()
+  try {
+    backups.value = await window.dshw.listBackups()
+  } catch (error) {
+    ElMessage.error(`读取备份列表失败：${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 async function loadSettings(): Promise<void> {
-  settings.value = await window.dshw.getBackupSettings()
+  try {
+    settings.value = await window.dshw.getBackupSettings()
+  } catch (error) {
+    ElMessage.error(`读取备份设置失败：${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 async function saveSettings(): Promise<void> {
-  // contextBridge 传参需可结构化克隆的普通对象（响应式 Proxy 会抛 DataCloneError）
-  const result = await window.dshw.setBackupSettings(JSON.parse(JSON.stringify(settings.value)))
-  if (result.ok) ElMessage.success('自动备份设置已保存')
+  try {
+    // contextBridge 传参需可结构化克隆的普通对象（响应式 Proxy 会抛 DataCloneError）
+    const result = await window.dshw.setBackupSettings(JSON.parse(JSON.stringify(settings.value)))
+    if (result.ok) ElMessage.success('自动备份设置已保存')
+    else ElMessage.error(result.error ?? '保存失败')
+  } catch (error) {
+    ElMessage.error(`保存失败：${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 function formatSize(bytes: number): string {

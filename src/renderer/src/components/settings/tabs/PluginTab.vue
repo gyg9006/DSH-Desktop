@@ -115,11 +115,15 @@ function isInstalled(name: string): boolean {
 }
 
 async function doInstall(pkg: NpmPluginHitPayload): Promise<void> {
-  await ElMessageBox.confirm(
-    `从 npm 安装 ${pkg.name}@${pkg.version}？\n该操作会在 dsh 的 web profile 中执行 pnpm add（联网）。`,
-    '安装插件',
-    { type: 'info', confirmButtonText: '安装', cancelButtonText: '取消' }
-  )
+  try {
+    await ElMessageBox.confirm(
+      `从 npm 安装 ${pkg.name}@${pkg.version}？\n该操作会在 dsh 的 web profile 中执行 pnpm add（联网）。`,
+      '安装插件',
+      { type: 'info', confirmButtonText: '安装', cancelButtonText: '取消' }
+    )
+  } catch {
+    return // 用户取消，静默返回
+  }
   installing.value = pkg.name
   opLog.value = ''
   try {
@@ -139,11 +143,15 @@ async function doInstall(pkg: NpmPluginHitPayload): Promise<void> {
 }
 
 async function doUninstall(pkg: InstalledPluginPayload): Promise<void> {
-  await ElMessageBox.confirm(`卸载 ${pkg.name}？会从 profile 移除该依赖（重启 dsh 服务后生效）。`, '卸载插件', {
-    type: 'warning',
-    confirmButtonText: '卸载',
-    cancelButtonText: '取消'
-  })
+  try {
+    await ElMessageBox.confirm(`卸载 ${pkg.name}？会从 profile 移除该依赖（重启 dsh 服务后生效）。`, '卸载插件', {
+      type: 'warning',
+      confirmButtonText: '卸载',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return // 用户取消，静默返回
+  }
   uninstalling.value = pkg.name
   opLog.value = ''
   try {

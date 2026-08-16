@@ -13,7 +13,7 @@ export const useServiceStore = defineStore('service', {
   actions: {
     init(): void {
       window.dshw.onServiceEvent((snapshot) => this.applySnapshot(snapshot))
-      void this.refresh()
+      void this.refresh().catch(() => undefined)
     },
     applySnapshot(snapshot: ServiceSnapshot): void {
       this.status = snapshot.status
@@ -22,17 +22,19 @@ export const useServiceStore = defineStore('service', {
       this.log = snapshot.log
     },
     async refresh(): Promise<void> {
-      const snapshot = await window.dshw.getServiceStatus()
-      this.applySnapshot(snapshot)
+      try {
+        const snapshot = await window.dshw.getServiceStatus()
+        this.applySnapshot(snapshot)
+      } catch (error) {
+        // IPC 失败保持当前状态，不产生 unhandled rejection
+        console.warn('[service] 刷新状态失败', error)
+      }
     },
     async start(): Promise<{ ok: boolean; error?: string }> {
       if (this.starting || this.stopping) return { ok: false, error: '操作进行中' }
       this.starting = true
       try {
         const result = await window.dshw.startService()
-        if (!result.ok) {
-          this.status = 'error'
-        }
         return result
       } finally {
         this.starting = false

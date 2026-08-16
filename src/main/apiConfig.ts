@@ -8,8 +8,8 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import yaml from 'js-yaml'
 import { readJsonFile, writeJsonAtomic } from '../shared/workspace'
+import { loadYamlObject, dumpYaml } from '../shared/yaml'
 import { getWorkspaceDir } from './config'
 import { logger } from './logger'
 
@@ -172,7 +172,7 @@ export function renderSettingsDocument(
   prevRoutes: string[],
   next: ApiConfig
 ): string {
-  const existing: Record<string, unknown> = text && text.trim() ? ((yaml.load(text) as Record<string, unknown>) ?? {}) : {}
+  const existing = loadYamlObject(text) ?? {}
   const merged: Record<string, unknown> = { ...existing }
 
   // llm-deepseek：合并官方段（桌面端只管理 baseURL / apiKeyEnv，先清掉再合并，避免残留）
@@ -205,7 +205,7 @@ export function renderSettingsDocument(
     delete merged['llm-pi-ai']
   }
 
-  return yaml.dump(merged, { lineWidth: -1, noRefs: true, noCompatMode: true, sortKeys: false })
+  return dumpYaml(merged)
 }
 
 /**
@@ -213,10 +213,10 @@ export function renderSettingsDocument(
  * value 传 undefined 表示删除该引用。
  */
 export function renderCredentialsDocument(text: string | undefined, ref: string, value: string | undefined): string {
-  const existing: Record<string, unknown> = text && text.trim() ? ((yaml.load(text) as Record<string, unknown>) ?? {}) : {}
+  const existing = loadYamlObject(text) ?? {}
   if (value === undefined || value.length === 0) delete existing[ref]
   else existing[ref] = value
-  return yaml.dump(existing, { lineWidth: -1, noRefs: true, noCompatMode: true, sortKeys: false })
+  return dumpYaml(existing)
 }
 
 /**

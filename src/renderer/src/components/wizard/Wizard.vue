@@ -47,21 +47,38 @@ async function applyManual(): Promise<void> {
   ElMessage.success('已应用，继续下一步')
 }
 
+const stepBusy = ref(false)
+
 async function next(): Promise<void> {
-  if (workspacePath.value && workspacePath.value !== appStore.workspacePath) {
-    // 用户在向导中更改了工作文件夹 → 持久化（重启后生效，本次会话继续使用新路径的目录骨架）
-    const result = await window.dshw.setWorkspacePath(workspacePath.value)
-    if (!result.ok) {
-      ElMessage.error(result.error ?? '工作文件夹无效')
-      return
+  // 防双击：并发执行两次 setWorkspacePath + step+=1 会跳过环境检测步骤
+  if (stepBusy.value) return
+  stepBusy.value = true
+  try {
+    if (workspacePath.value && workspacePath.value !== appStore.workspacePath) {
+      // 用户在向导中更改了工作文件夹 → 持久化（重启后生效，本次会话继续使用新路径的目录骨架）
+      const result = await window.dshw.setWorkspacePath(workspacePath.value)
+      if (!result.ok) {
+        ElMessage.error(result.error ?? '工作文件夹无效')
+        return
+      }
     }
+    step.value += 1
+  } finally {
+    stepBusy.value = false
   }
-  step.value += 1
 }
 
 async function finish(): Promise<void> {
-  await appStore.updateConfig({ onboarded: true })
-  ElMessage.success('初始化完成，欢迎使用 DSH 桌面')
+  if (stepBusy.value) return
+  stepBusy.value = true
+  try {
+    await appStore.updateConfig({ onboarded: true })
+    ElMessage.success('初始化完成，欢迎使用 DSH 桌面')
+  } catch (error) {
+    ElMessage.error(`初始化失败：${error instanceof Error ? error.message : String(error)}`)
+  } finally {
+    stepBusy.value = false
+  }
 }
 </script>
 
@@ -132,7 +149,7 @@ async function finish(): Promise<void> {
             </li>
             <li class="flex gap-2">
               <span class="font-semibold text-brand">②</span>
-              点击主界面的「一键启动服务」（服务功能将在 M4 提供）
+              点击主界面的「启动服务」，或打开「设置 → 服务与运行」配置启动参数与自启动
             </li>
             <li class="flex gap-2">
               <span class="font-semibold text-brand">③</span>

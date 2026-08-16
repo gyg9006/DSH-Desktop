@@ -36,7 +36,8 @@ import {
   Aim,
   CopyDocument,
   List,
-  Download
+  Download,
+  CircleCheckFilled
 } from '@element-plus/icons-vue'
 import AppLogo from './AppLogo.vue'
 import { useAppStore } from '../stores/app'
@@ -878,7 +879,8 @@ const SETTING_ITEMS = [
                           <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(s.id) ? '取消收藏' : '收藏' }}</el-dropdown-item>
                           <el-dropdown-item v-if="data.groupMap[s.id]" command="back-to-workspace" :icon="Back" divided>返回工作区</el-dropdown-item>
                           <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
-                          <el-dropdown-item command="export" :icon="Download">导出会话</el-dropdown-item>\n<el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
+                          <el-dropdown-item command="export" :icon="Download">导出会话</el-dropdown-item>
+                          <el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
                         </el-dropdown-menu>
                       </template>
                     </el-dropdown>
@@ -970,7 +972,8 @@ const SETTING_ITEMS = [
                                   <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(s.id) ? '取消收藏' : '收藏' }}</el-dropdown-item>
                                   <el-dropdown-item command="back-to-workspace" :icon="Back" divided>返回工作区</el-dropdown-item>
                                   <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
-                                  <el-dropdown-item command="export" :icon="Download">导出会话</el-dropdown-item>\n<el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
+                                  <el-dropdown-item command="export" :icon="Download">导出会话</el-dropdown-item>
+                                  <el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
                                 </el-dropdown-menu>
                               </template>
                             </el-dropdown>
@@ -1005,7 +1008,8 @@ const SETTING_ITEMS = [
                                 <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(s.id) ? '取消收藏' : '收藏' }}</el-dropdown-item>
                                 <el-dropdown-item v-if="data.groupMap[s.id]" command="back-to-workspace" :icon="Back" divided>返回工作区</el-dropdown-item>
                                 <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
-                                <el-dropdown-item command="export" :icon="Download">导出会话</el-dropdown-item>\n<el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
+                                <el-dropdown-item command="export" :icon="Download">导出会话</el-dropdown-item>
+                                <el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
                               </el-dropdown-menu>
                             </template>
                           </el-dropdown>

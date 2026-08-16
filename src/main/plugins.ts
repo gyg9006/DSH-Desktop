@@ -12,7 +12,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import yaml from 'js-yaml'
-import { runCommand, buildChildEnv } from './utils/process'
+import { runCommand } from './utils/process'
 import { buildDshEnv } from './envCheck'
 import { logger } from './logger'
 
@@ -696,7 +696,20 @@ export interface PluginOpCallbacks {
 }
 
 function dshEnv(workspaceDir: string): NodeJS.ProcessEnv {
-  return { ...buildChildEnv(workspaceDir), ...buildDshEnv(workspaceDir) }
+  return buildDshEnv(workspaceDir)
+}
+
+/**
+ * 校验 npm 包名/安装参数：拒绝前导 `-`（防被 npm 解析为选项）、绝对路径与路径穿越。
+ * 合法形态：`name`、`@scope/name`、`name@version`、`@scope/name@version`。
+ */
+export function isValidPkgSpec(spec: string): boolean {
+  return /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(@[a-zA-Z0-9._-]+)?$/.test(spec.trim())
+}
+
+/** 从 pkgSpec（可带 @version）解析出纯包名（正确处理 scoped 包，如 @deepseek-ai/dsh-mcp-client）。 */
+export function extractPkgName(pkgSpec: string): string {
+  return pkgSpec.trim().match(/^(@[^@\s]+\/)?[^@\s]+/)?.[0].trim() ?? pkgSpec.trim()
 }
 
 /** 安装插件：dsh plugin --profile web add <spec>（pnpm），并做 bundle 层核对。 */
@@ -710,6 +723,7 @@ export async function installPlugin(
   const dshBin = path.join(workspaceDir, 'runtime', 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
   if (!fs.existsSync(nodeExe)) return { ok: false, error: '未找到便携 Node（请先在环境检测中安装）' }
   if (!fs.existsSync(dshBin)) return { ok: false, error: '未找到 dsh 运行时' }
+  if (!isValidPkgSpec(pkgSpec)) return { ok: false, error: `插件参数非法：${pkgSpec}` }
   cbs.log(`安装 ${pkgSpec} …`)
   const result = await runCommand({
     command: nodeExe,
@@ -726,7 +740,7 @@ export async function installPlugin(
     const tail = (result.stderr || result.stdout).split('\n').slice(-6).join('\n')
     return { ok: false, error: `安装失败：${result.error ?? `退出码 ${result.code}`}\n${tail}` }
   }
-  const pkgName = pkgSpec.split('@')[0].trim()
+  const pkgName = extractPkgName(pkgSpec)
   const bundle = declaresBundle(workspaceDir, pkgName)
   logger.info(`插件 ${pkgSpec} 安装完成（bundle=${bundle}）`)
   return { ok: true, bundle }
@@ -743,6 +757,7 @@ export async function uninstallPlugin(
   const dshBin = path.join(workspaceDir, 'runtime', 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
   if (!fs.existsSync(nodeExe)) return { ok: false, error: '未找到便携 Node' }
   if (!fs.existsSync(dshBin)) return { ok: false, error: '未找到 dsh 运行时' }
+  if (!isValidPkgSpec(pkgName)) return { ok: false, error: `插件参数非法：${pkgName}` }
   cbs.log(`卸载 ${pkgName} …`)
   const result = await runCommand({
     command: nodeExe,

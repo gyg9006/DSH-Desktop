@@ -28,6 +28,13 @@ export function getSyncDir(workspaceDir: string): string {
   return path.join(workspaceDir, 'sync')
 }
 
+/** 校验同步远端地址：仅接受 http(s)/ssh/git scheme，拒绝前导 `-`（防被 git 解析为选项）。 */
+export function isValidRemoteUrl(url: string): boolean {
+  const t = url.trim()
+  if (!t || t.startsWith('-')) return false
+  return /^(https?|ssh|git):\/\//i.test(t)
+}
+
 function getSyncConfigPath(workspaceDir: string): string {
   return path.join(workspaceDir, 'config', 'sync.json')
 }
@@ -71,13 +78,45 @@ function syncTree(srcRoot: string, destRoot: string): number {
   return copied
 }
 
-/** 把本地会话同步到 sync 仓库工作区。 */
+/**
+ * 按会话 id 对齐删除：把 destRoot（镜像侧）中「源侧已不存在」的会话目录删掉，
+ * 保证删除操作能经 git 传播（否则 syncTree 只增不删，已删会话会在下次拉取时复活）。
+ * 结构：<root>/<projectKey>/<sessionId>/。
+ */
+export function pruneMissing(srcRoot: string, destRoot: string): number {
+  if (!fs.existsSync(destRoot)) return 0
+  let removed = 0
+  for (const groupEntry of fs.readdirSync(destRoot, { withFileTypes: true })) {
+    if (!groupEntry.isDirectory()) continue
+    const destGroup = path.join(destRoot, groupEntry.name)
+    const srcGroup = path.join(srcRoot, groupEntry.name)
+    // 源侧整个组已不存在 → 删除整个组目录
+    if (!fs.existsSync(srcGroup)) {
+      fs.rmSync(destGroup, { recursive: true, force: true })
+      removed += 1
+      continue
+    }
+    for (const sidEntry of fs.readdirSync(destGroup, { withFileTypes: true })) {
+      if (!sidEntry.isDirectory()) continue
+      const destSid = path.join(destGroup, sidEntry.name)
+      if (!fs.existsSync(path.join(srcGroup, sidEntry.name))) {
+        fs.rmSync(destSid, { recursive: true, force: true })
+        removed += 1
+      }
+    }
+  }
+  return removed
+}
+
+/** 把本地会话同步到 sync 仓库工作区（复制 + 删除对齐，使删除可传播）。 */
 function prepareLocal(workspaceDir: string): number {
   const syncDir = getSyncDir(workspaceDir)
   fs.mkdirSync(syncDir, { recursive: true })
   const sessionsSrc = path.join(workspaceDir, 'data', 'sessions')
   const sessionsDest = path.join(syncDir, 'sessions')
   const copied = syncTree(sessionsSrc, sessionsDest)
+  // 本地已删除的会话也从镜像侧删除（git add -A 才会记录删除）
+  pruneMissing(sessionsSrc, sessionsDest)
   // 会话元数据（projcache）作为同步副本
   const projSrc = path.join(workspaceDir, 'data', 'storages', 'session_projcache.json')
   if (fs.existsSync(projSrc)) {
@@ -86,12 +125,14 @@ function prepareLocal(workspaceDir: string): number {
   return copied
 }
 
-/** 把远端（sync 仓库）内容合并回本地 data/sessions。 */
+/** 把远端（sync 仓库）内容合并回本地 data/sessions（复制 + 删除对齐）。 */
 function applyRemote(workspaceDir: string): number {
   const syncDir = getSyncDir(workspaceDir)
   const sessionsSrc = path.join(syncDir, 'sessions')
   const sessionsDest = path.join(workspaceDir, 'data', 'sessions')
   const copied = syncTree(sessionsSrc, sessionsDest)
+  // 远端已删除的会话也从本地删除（避免已删会话复活）
+  pruneMissing(sessionsSrc, sessionsDest)
   const projFile = path.join(syncDir, 'session_projcache.json')
   if (fs.existsSync(projFile)) {
     const destDir = path.join(workspaceDir, 'data', 'storages')
@@ -142,7 +183,7 @@ async function remoteBranchExists(workspaceDir: string, branch: string): Promise
 }
 
 /** 推送本地会话到远端。 */
-export async function syncPush(): Promise<{ ok: boolean; error?: string; pushed?: number }> {
+export async function syncPush(): Promise<{ ok: boolean; error?: string; pushed?: number; conflict?: boolean }> {
   const workspaceDir = getWorkspaceDir()
   const config = readSyncConfig()
   if (!config.remoteUrl) return { ok: false, error: '尚未配置同步远端仓库地址' }
@@ -167,8 +208,8 @@ export async function syncPush(): Promise<{ ok: boolean; error?: string; pushed?
 
   const pull = await git(workspaceDir, ['pull', '--rebase', 'origin', branch])
   if (!pull.ok) {
-    // rebase 冲突 → 返回错误，由 UI 提供强制方案
-    return { ok: false, error: `同步冲突：${pull.error}。可尝试「以本地为准强制推送」或「以远端为准」` }
+    // rebase 冲突 → 返回错误（conflict=true），由 UI 提供强制方案
+    return { ok: false, conflict: true, error: `同步冲突：${pull.error}。可尝试「以本地为准强制推送」或「以远端为准」` }
   }
   const push = await git(workspaceDir, ['push', 'origin', branch])
   if (!push.ok) {
@@ -180,7 +221,7 @@ export async function syncPush(): Promise<{ ok: boolean; error?: string; pushed?
 }
 
 /** 拉取远端会话到本地。 */
-export async function syncPull(): Promise<{ ok: boolean; error?: string; pulled?: number }> {
+export async function syncPull(): Promise<{ ok: boolean; error?: string; pulled?: number; conflict?: boolean }> {
   const workspaceDir = getWorkspaceDir()
   const config = readSyncConfig()
   if (!config.remoteUrl) return { ok: false, error: '尚未配置同步远端仓库地址' }
@@ -198,7 +239,7 @@ export async function syncPull(): Promise<{ ok: boolean; error?: string; pulled?
   await git(workspaceDir, ['commit', '-m', `sync local ${Date.now()}`])
   const pull = await git(workspaceDir, ['pull', '--rebase', 'origin', branch])
   if (!pull.ok) {
-    return { ok: false, error: `同步冲突：${pull.error}。可尝试「以远端为准」` }
+    return { ok: false, conflict: true, error: `同步冲突：${pull.error}。可尝试「以远端为准」` }
   }
   const pulled = applyRemote(workspaceDir)
   writeSyncConfig({ lastSyncAt: Date.now() })
@@ -206,11 +247,16 @@ export async function syncPull(): Promise<{ ok: boolean; error?: string; pulled?
   return { ok: true, pulled }
 }
 
-/** 冲突强制解决：以远端为准（丢弃本地会话变更）。 */
-export async function syncForceRemote(): Promise<{ ok: boolean; error?: string; pulled?: number }> {
+/** 冲突强制解决：以远端为准（丢弃本地会话变更）。先 fetch 保证引用最新，再 reset。 */
+export async function syncForceRemote(): Promise<{ ok: boolean; error?: string; pulled?: number; conflict?: boolean }> {
   const workspaceDir = getWorkspaceDir()
   const config = readSyncConfig()
+  if (!config.remoteUrl) return { ok: false, error: '尚未配置同步远端仓库地址' }
+  const initError = await ensureRepo(workspaceDir, config)
+  if (initError) return { ok: false, error: initError }
   const branch = config.branch || 'main'
+  const fetch = await git(workspaceDir, ['fetch', 'origin', branch])
+  if (!fetch.ok) return { ok: false, error: `拉取远端失败：${fetch.error}` }
   const reset = await git(workspaceDir, ['reset', '--hard', `origin/${branch}`])
   if (!reset.ok) return { ok: false, error: `重置失败：${reset.error}` }
   const pulled = applyRemote(workspaceDir)
@@ -219,7 +265,7 @@ export async function syncForceRemote(): Promise<{ ok: boolean; error?: string; 
 }
 
 /** 冲突强制解决：以本地为准（强制推送覆盖远端）。 */
-export async function syncForceLocal(): Promise<{ ok: boolean; error?: string; pushed?: number }> {
+export async function syncForceLocal(): Promise<{ ok: boolean; error?: string; pushed?: number; conflict?: boolean }> {
   const workspaceDir = getWorkspaceDir()
   const config = readSyncConfig()
   const branch = config.branch || 'main'

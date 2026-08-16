@@ -11,8 +11,8 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import yaml from 'js-yaml'
 import { probeWritable } from '../shared/workspace'
+import { loadYamlAny, dumpYaml } from '../shared/yaml'
 import type { DshDataDirStatus, DshDataItemKey, DshDataScanItem, DshDataSource, MigrateConflictPolicy, MigrateResult } from '../shared/ipc'
 
 export interface MigrateCallbacks {
@@ -309,7 +309,7 @@ export function readHomePatch(workspaceDir: string): unknown[] {
   const patchPath = path.join(workspaceDir, 'data', 'cordis.patch.yml')
   if (!fs.existsSync(patchPath)) return []
   try {
-    const parsed = yaml.load(fs.readFileSync(patchPath, 'utf8'))
+    const parsed = loadYamlAny(fs.readFileSync(patchPath, 'utf8'))
     return Array.isArray(parsed) ? parsed : []
   } catch {
     return []
@@ -322,7 +322,7 @@ export function writeHomePatch(workspaceDir: string): void {
   fs.mkdirSync(dataDir, { recursive: true })
   const patchPath = path.join(dataDir, 'cordis.patch.yml')
   const merged = mergePatchEntries(readHomePatch(workspaceDir), [], dshSkillPatchEntry(workspaceDir))
-  fs.writeFileSync(patchPath, yaml.dump(merged), 'utf8')
+  fs.writeFileSync(patchPath, dumpYaml(merged), 'utf8')
 }
 
 /** 迁移时合并源补丁：源条目并入（skill-filesystem 保持我们的）。 */
@@ -332,13 +332,13 @@ export function mergeSourcePatchIntoHome(workspaceDir: string, sourcePatchPath: 
   const patchPath = path.join(dataDir, 'cordis.patch.yml')
   let incoming: unknown[] = []
   try {
-    const parsed = yaml.load(fs.readFileSync(sourcePatchPath, 'utf8'))
+    const parsed = loadYamlAny(fs.readFileSync(sourcePatchPath, 'utf8'))
     if (Array.isArray(parsed)) incoming = parsed
   } catch {
     incoming = []
   }
   const merged = mergePatchEntries(readHomePatch(workspaceDir), incoming, dshSkillPatchEntry(workspaceDir))
-  fs.writeFileSync(patchPath, yaml.dump(merged), 'utf8')
+  fs.writeFileSync(patchPath, dumpYaml(merged), 'utf8')
 }
 
 // ---------------------------------------------------------------------------

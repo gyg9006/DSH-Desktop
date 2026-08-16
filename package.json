@@ -1,6 +1,6 @@
 {
   "name": "dsh-workbench",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DSH 桌面 —— DeepSeek Harness 便携式 Windows 桌面客户端（绿色免安装、零残留）",
   "main": "./out/main/index.js",
   "author": {
@@ -30,7 +30,8 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run",
     "gen:icon": "node scripts/gen-icon.mjs",
-    "pack:dir": "npm run build && node scripts/gen-icon.mjs && electron-builder --win dir && node scripts/flatten-build.mjs"
+    "pack:dir": "npm run build && node scripts/gen-icon.mjs && electron-builder --win dir && node scripts/flatten-build.mjs",
+    "release:zip": "node scripts/release.mjs"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"

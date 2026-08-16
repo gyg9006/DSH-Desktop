@@ -135,7 +135,7 @@ function skillsRoot(workspaceDir: string): string {
 // npm 源：npmmirror tarball 解包
 // ---------------------------------------------------------------------------
 
-/** 极简 tar 解析（gzip 已解压）：返回 { path, content } 列表。 */
+/** 极简 tar 解析（gzip 已解压）：返回 { path, content } 列表。路径已规范化并拒绝穿越/绝对路径。 */
 export function parseTar(buffer: Buffer): Array<{ path: string; content: Buffer }> {
   const out: Array<{ path: string; content: Buffer }> = []
   let off = 0
@@ -146,7 +146,12 @@ export function parseTar(buffer: Buffer): Array<{ path: string; content: Buffer 
     const size = parseInt(header.subarray(124, 136).toString('utf8').replace(/\0.*$/, '').trim() || '0', 8) || 0
     const type = header.subarray(156, 157).toString('utf8') || '0'
     if (type === '0' || type === '') {
-      out.push({ path: name.replace(/^\.\//, ''), content: buffer.subarray(off + 512, off + 512 + size) })
+      // 安全校验：规范化后必须仍是相对路径（拒绝 ../ 逃逸与绝对路径）
+      const normalized = path.posix.normalize(name.replace(/\\/g, '/')).replace(/^\.\/+/, '')
+      if (!normalized || normalized.startsWith('../') || path.posix.isAbsolute(normalized)) {
+        throw new Error(`tar 条目路径不安全：${name}`)
+      }
+      out.push({ path: normalized, content: buffer.subarray(off + 512, off + 512 + size) })
     }
     off += 512 + Math.ceil(size / 512) * 512
   }

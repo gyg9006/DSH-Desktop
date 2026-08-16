@@ -75,7 +75,11 @@ async function save(): Promise<void> {
 
 async function toggleLoginItem(enabled: boolean): Promise<void> {
   const result = await window.dshw.setLoginItem(enabled)
-  if (!result.ok) ElMessage.error('设置开机自启失败')
+  if (!result.ok) {
+    ElMessage.error('设置开机自启失败')
+    // 回滚开关，保持与系统登录项状态一致
+    serviceConfig.value.autoStart = !enabled
+  }
 }
 </script>
 

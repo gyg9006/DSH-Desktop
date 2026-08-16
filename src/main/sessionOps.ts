@@ -200,7 +200,7 @@ function findSessionDir(workspaceDir: string, sessionId: string): string | null 
     if (depth > 4 || candidates.length > 0) return
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       if (!e.isDirectory()) continue
-      if (e.name === sessionId && fs.existsSync(path.join(dir, e.name, 'session.jsonl.zstd'))) {
+      if (e.name === sessionId && fs.readdirSync(path.join(dir, e.name)).some((f) => /^session\.jsonl(\.zstd)?$/.test(f))) {
         candidates.push(path.join(dir, e.name))
       } else if (depth < 3) {
         walk(path.join(dir, e.name), depth + 1)

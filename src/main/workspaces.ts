@@ -7,7 +7,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { readJsonFile } from '../shared/workspace'
+import { readJsonFile, writeJsonAtomic } from '../shared/workspace'
 import { readSessionMeta, dshProjectKey } from './sessions'
 import { getWorkspaceDir } from './config'
 import { logger } from './logger'
@@ -267,22 +267,65 @@ export async function deleteWorkspace(workspaceDir: string, id: string): Promise
   if (rpc.unreachable !== true) return { ok: false, error: rpc.error ?? '删除失败' }
   try {
     let removedPath = ''
+    let removedSessionIds: string[] = []
     writeRegistry(workspaceDir, (doc) => {
       const rec = doc.tables?.workspaces?.[id]
       if (rec && typeof rec.path === 'string') removedPath = rec.path
+      if (rec && Array.isArray(rec.sessionIds)) {
+        removedSessionIds = rec.sessionIds.filter((x): x is string => typeof x === 'string')
+      }
       if (doc.tables?.workspaces) delete doc.tables.workspaces[id]
       doc.global.workspaceIds = doc.global.workspaceIds.filter((x) => x !== id)
     })
-    // 删除对应会话目录（sessions/<cwd 转义>/）
+    // 删除对应会话目录（sessions/<dshProjectKey(cwd)>/；目录名必须与 dsh 布局一致）
     if (removedPath) {
-      const group = removedPath.replace(/[\\/:*?"<>|]/g, '-')
+      const group = dshProjectKey(removedPath)
       const sessionsRoot = path.join(workspaceDir, 'data', 'sessions')
       const dir = path.join(sessionsRoot, group)
       if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
+      // 清理该工作区会话的归档/分组/收藏索引（避免残留引用）
+      cleanSidebarIndexes(workspaceDir, removedSessionIds)
     }
     logger.info(`工作区 ${id} 已删除（本地注册表，服务不可达）`)
     return { ok: true }
   } catch (error) {
     return { ok: false, error: `删除失败：${error instanceof Error ? error.message : String(error)}` }
+  }
+}
+
+/**
+ * 删除工作区时清理其会话在侧边栏索引中的残留：
+ * - config/archived-index.json：删除已归档会话条目（目录随后随 data/archived 保留，条目不再显示）
+ * - config/session-groups.json：删除会话分组映射
+ * - config/session-favorites.json：删除收藏
+ */
+export function cleanSidebarIndexes(workspaceDir: string, sessionIds: string[]): void {
+  if (sessionIds.length === 0) return
+  const ids = new Set(sessionIds)
+
+  // 归档索引
+  const archivedPath = path.join(workspaceDir, 'config', 'archived-index.json')
+  const archivedRaw = readJsonFile(archivedPath) as { entries?: Record<string, unknown> } | null
+  if (archivedRaw?.entries && typeof archivedRaw.entries === 'object') {
+    const entries = { ...archivedRaw.entries }
+    for (const sid of ids) delete entries[sid]
+    writeJsonAtomic(archivedPath, { ...archivedRaw, entries })
+  }
+
+  // 分组（仅移除会话映射；分组实体属于工作区级，不在此删除）
+  const groupsPath = path.join(workspaceDir, 'config', 'session-groups.json')
+  const groupsRaw = readJsonFile(groupsPath) as { groups?: unknown; map?: Record<string, string> } | null
+  if (groupsRaw && (Array.isArray(groupsRaw.groups) || groupsRaw.map)) {
+    const map = groupsRaw.map && typeof groupsRaw.map === 'object' ? { ...groupsRaw.map } : {}
+    for (const sid of ids) delete map[sid]
+    writeJsonAtomic(groupsPath, { ...groupsRaw, map })
+  }
+
+  // 收藏
+  const favPath = path.join(workspaceDir, 'config', 'session-favorites.json')
+  const favRaw = readJsonFile(favPath) as { favorites?: unknown } | null
+  if (Array.isArray(favRaw?.favorites)) {
+    const favorites = (favRaw.favorites as string[]).filter((x) => !ids.has(x))
+    writeJsonAtomic(favPath, { ...favRaw, favorites })
   }
 }

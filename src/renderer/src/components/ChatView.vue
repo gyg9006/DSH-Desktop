@@ -26,15 +26,30 @@ const webviewKey = ref(0)
 /** 隐藏 dsh 内置侧边栏的通用 CSS（不依赖动态类名，insertCSS 跨 reload 保留，页面加载早期即生效）。 */
 const DSH_RAIL_HIDE_CSS = `[class*="_root"]:has(button[aria-label*="新建会话"]) { display: none !important; }`
 
-/** 注入侧边栏隐藏 CSS（webview insertCSS 持久，reload 后依然生效 → 打开会话刷新时零闪显）。 */
-function injectRailHideCss(): void {
+/** 显示 dsh 内置侧边栏的 CSS（覆盖隐藏规则）。 */
+const DSH_RAIL_SHOW_CSS = `[class*="_root"]:has(button[aria-label*="新建会话"]) { display: flex !important; }`
+
+/** 当前已注入的 CSS key（insertCSS 返回；切换时先移除旧的，避免样式表累积）。 */
+let railCssKey = ''
+
+/** 注入/替换侧边栏 CSS（保留最新一条：先移除旧 key 再注入，避免多次切换累积样式表）。 */
+async function applyRailCss(css: string): Promise<void> {
   const wv = webviewRef.value
   if (!wv) return
   try {
-    wv.insertCSS(DSH_RAIL_HIDE_CSS)
+    if (railCssKey) {
+      await wv.removeInsertedCSS(railCssKey).catch(() => undefined)
+      railCssKey = ''
+    }
+    railCssKey = await wv.insertCSS(css)
   } catch {
     // 老版本 API 不支持时忽略
   }
+}
+
+/** 注入侧边栏隐藏 CSS（webview insertCSS 持久，reload 后依然生效 → 打开会话刷新时零闪显）。 */
+function injectRailHideCss(): void {
+  void applyRailCss(DSH_RAIL_HIDE_CSS)
 }
 
 /** 注入 dsh 侧边栏隐藏（CSS 通用规则为主 + JS 兜底）。
@@ -99,15 +114,7 @@ async function toggleDshSidebar(): Promise<void> {
   dshSidebarVisible.value = show
   if (wv) {
     // 用户开启 → 注入「显示」规则覆盖隐藏；关闭 → 移除覆盖规则恢复隐藏
-    try {
-      if (show) {
-        wv.insertCSS(`[class*="_root"]:has(button[aria-label*="新建会话"]) { display: flex !important; }`)
-      } else {
-        wv.insertCSS(DSH_RAIL_HIDE_CSS)
-      }
-    } catch {
-      /* 忽略 */
-    }
+    void applyRailCss(show ? DSH_RAIL_SHOW_CSS : DSH_RAIL_HIDE_CSS)
     wv.executeJavaScript(`window.__dshwSidebarHelper ? window.__dshwSidebarHelper.set(${show ? 'true' : 'false'}) : 'n/a'`).catch(() => undefined)
   }
   const result = await window.dshw.updateConfig({ showDshSidebar: show })

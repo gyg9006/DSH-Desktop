@@ -273,7 +273,8 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
   })
 
   // 等待服务就绪（超时时间可配置，规格 6.13）
-  const timeoutMs = svc.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS
+  // 配置存储单位为秒（UI 标签「启动超时时间（秒）」），此处换算为毫秒
+  const timeoutMs = (svc.startupTimeoutMs && svc.startupTimeoutMs > 0 ? svc.startupTimeoutMs : DEFAULT_STARTUP_TIMEOUT_MS / 1000) * 1000
   const deadline = Date.now() + timeoutMs
   let ready = false
   while (Date.now() < deadline && child) {

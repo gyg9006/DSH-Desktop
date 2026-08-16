@@ -39,7 +39,11 @@ import type {
   WorkspaceInfo,
   WorkspaceSetResult,
   SyncConfigPayload,
-  SyncResultPayload
+  SyncResultPayload,
+  UpdateSettingsPayload,
+  UpdateCheckResultPayload,
+  UpdateEventPayload,
+  UpdateDownloadResultPayload
 } from '../shared/ipc'
 
 const api = {
@@ -167,7 +171,7 @@ const api = {
   /** 同步配置。 */
   getSyncConfig: (): Promise<{ config: SyncConfigPayload; counts: { local: number; remote: number } }> =>
     ipcRenderer.invoke(IPC.SyncGet),
-  setSyncConfig: (patch: SyncConfigPayload): Promise<{ ok: boolean; config?: SyncConfigPayload }> =>
+  setSyncConfig: (patch: SyncConfigPayload): Promise<{ ok: boolean; config?: SyncConfigPayload; error?: string }> =>
     ipcRenderer.invoke(IPC.SyncSet, patch),
   syncPush: (): Promise<SyncResultPayload> => ipcRenderer.invoke(IPC.SyncPush),
   syncPull: (): Promise<SyncResultPayload> => ipcRenderer.invoke(IPC.SyncPull),
@@ -257,7 +261,7 @@ const api = {
   exportWorkspace: (destDir: string, includeRuntime: boolean): Promise<{ ok: boolean; error?: string; sizeBytes?: number }> =>
     ipcRenderer.invoke(IPC.BackupExport, destDir, includeRuntime),
   getBackupSettings: (): Promise<BackupSettingsPayload> => ipcRenderer.invoke(IPC.BackupSettingsGet),
-  setBackupSettings: (patch: BackupSettingsPayload): Promise<{ ok: boolean; settings?: BackupSettingsPayload }> =>
+  setBackupSettings: (patch: BackupSettingsPayload): Promise<{ ok: boolean; settings?: BackupSettingsPayload; error?: string }> =>
     ipcRenderer.invoke(IPC.BackupSettingsSet, patch),
 
   // ---------- M5：日志 ----------
@@ -266,8 +270,23 @@ const api = {
   exportLogs: (): Promise<{ ok: boolean; canceled?: boolean; error?: string }> => ipcRenderer.invoke(IPC.LogsExport),
 
   // ---------- M5：关于 ----------
-  checkUpdate: (): Promise<{ ok: boolean; current: string; hasUpdate: boolean; message: string }> =>
-    ipcRenderer.invoke(IPC.AppCheckUpdate),
+  checkUpdate: (): Promise<UpdateCheckResultPayload> => ipcRenderer.invoke(IPC.AppCheckUpdate),
+  getUpdateSettings: (): Promise<UpdateSettingsPayload> => ipcRenderer.invoke(IPC.AppUpdateSettingsGet),
+  setUpdateSettings: (patch: Partial<UpdateSettingsPayload>): Promise<{ ok: boolean; settings?: UpdateSettingsPayload }> =>
+    ipcRenderer.invoke(IPC.AppUpdateSettingsSet, patch),
+  downloadUpdate: (assetId: number): Promise<UpdateDownloadResultPayload> =>
+    ipcRenderer.invoke(IPC.AppUpdateDownload, assetId),
+  cancelUpdateDownload: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.AppUpdateCancel),
+  applyUpdate: (zipPath: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.AppUpdateApply, zipPath),
+  /** 订阅更新事件（进度/状态）；返回取消订阅函数。 */
+  onUpdateEvent: (callback: (event: UpdateEventPayload) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: UpdateEventPayload): void => callback(payload)
+    ipcRenderer.on(IPC.UpdateEvent, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.UpdateEvent, listener)
+    }
+  },
   setLoginItem: (enabled: boolean): Promise<{ ok: boolean; enabled: boolean }> =>
     ipcRenderer.invoke(IPC.AppSetLoginItem, enabled),
 

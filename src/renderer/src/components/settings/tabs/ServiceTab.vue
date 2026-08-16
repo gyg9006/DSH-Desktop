@@ -16,6 +16,22 @@ const serviceConfig = ref<{
 
 const argsText = ref('web')
 const saving = ref(false)
+const cleaning = ref(false)
+
+/** 清理残留 dsh 进程（外部命令行启动的全局 dsh / 异常退出残留）。 */
+async function cleanup(): Promise<void> {
+  cleaning.value = true
+  try {
+    const result = await window.dshw.cleanupService()
+    if (result.ok) {
+      ElMessage.success(result.cleaned > 0 ? `已清理 ${result.cleaned} 个残留进程，可重新启动服务` : '未发现残留进程，可直接启动服务')
+    } else {
+      ElMessage.error('清理失败，请手动结束占用端口的进程')
+    }
+  } finally {
+    cleaning.value = false
+  }
+}
 
 async function load(): Promise<void> {
   const config = await window.dshw.getConfig()
@@ -93,6 +109,15 @@ async function toggleLoginItem(enabled: boolean): Promise<void> {
           size="small"
           class="mt-2 !w-40"
         />
+      </div>
+
+      <!-- 清理残留进程 -->
+      <div class="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2.5 dark:border-[#23262C]">
+        <div>
+          <div class="text-xs font-medium text-gray-700 dark:text-gray-200">清理残留进程</div>
+          <div class="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">服务停止后仍有旧 dsh 进程占用端口、启动报「端口被占用 / 残留进程」时使用</div>
+        </div>
+        <el-button size="small" :loading="cleaning" @click="cleanup()">清理残留</el-button>
       </div>
 
       <!-- 6.13 启动超时 -->

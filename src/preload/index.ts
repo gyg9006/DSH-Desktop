@@ -144,6 +144,9 @@ const api = {
     }
   },
 
+  /** 清理残留 dsh 进程（启动报「端口被占用 / 旧进程残留」时使用）。 */
+  cleanupService: (): Promise<{ ok: boolean; cleaned: number }> => ipcRenderer.invoke(IPC.ServiceCleanup),
+
   /** 会话列表（规格 5.2）。 */
   listSessions: (): Promise<SessionEntry[]> => ipcRenderer.invoke(IPC.SessionsList),
 

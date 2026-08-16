@@ -33,7 +33,7 @@ import {
   isMigrationCancelled
 } from './migrate'
 import { validateWorkspacePath, writeJsonAtomic, readJsonFile } from '../shared/workspace'
-import { startDshService, stopDshService, getServiceSnapshot, onServiceStatusChange } from './dshService'
+import { startDshService, stopDshService, getServiceSnapshot, onServiceStatusChange, cleanupStaleDsh } from './dshService'
 import { listSessions, pinSession, deleteSession, importSessionsFrom, expandImportArchives } from './sessions'
 import { resetApp } from './reset'
 import { readSyncConfig, writeSyncConfig, syncPush, syncPull, syncForceRemote, syncForceLocal, syncSessionCount } from './sync'
@@ -305,6 +305,12 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.ServiceStatus, () => getServiceSnapshot())
+
+  // 手动清理残留 dsh 进程（服务启动报「旧进程残留 / 端口被占用」时使用）
+  ipcMain.handle(IPC.ServiceCleanup, async () => {
+    const cleaned = await cleanupStaleDsh()
+    return { ok: true, cleaned }
+  })
 
   onServiceStatusChange((snapshot) => {
     const win = getMainWindow()

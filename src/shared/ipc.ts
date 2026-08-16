@@ -30,6 +30,7 @@ export const IPC = {
   ServiceStop: 'service:stop',
   ServiceStatus: 'service:status',
   ServiceEvent: 'service:event',
+  ServiceCleanup: 'service:cleanup',
   SessionsList: 'sessions:list',
   SessionsPin: 'sessions:pin',
   SessionsDelete: 'sessions:delete',

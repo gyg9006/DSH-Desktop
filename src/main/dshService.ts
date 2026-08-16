@@ -129,11 +129,14 @@ function psEncoded(script: string): string {
   return Buffer.from(script, 'utf16le').toString('base64')
 }
 
-/** 清理上次残留的 dsh 子进程（按命令行特征：本工作文件夹 runtime/dsh 的 bin.js）。 */
+/** 清理上次残留的 dsh 子进程。
+ *  只匹配本工作区 runtime\dsh 的进程（按命令行特征），绝不清理外部 dsh——
+ *  用户在浏览器/命令行里单独启动的 dsh web 属于独立实例，桌面端无权终止。 */
 export async function cleanupStaleDsh(): Promise<number> {
   const workspaceDir = getWorkspaceDir()
   const dshDir = path.join(workspaceDir, 'runtime', 'dsh')
   if (!fs.existsSync(path.join(dshDir, 'node_modules', '@deepseek-ai', 'dsh'))) return 0
+  // 命令行含本工作区 runtime\dsh\...\bin.js（注意：不匹配 npm-cache/_npx 等外部路径）
   const match = dshDir.replace(/\\/g, '\\\\').replace(/'/g, "''")
   const script = [
     "Get-CimInstance Win32_Process -Filter \"name = 'node.exe'\"",
@@ -153,16 +156,20 @@ export async function cleanupStaleDsh(): Promise<number> {
     .split(/\s+/)
     .map((s) => Number.parseInt(s, 10))
     .filter((n) => Number.isInteger(n) && n > 0)
+  let cleaned = 0
   for (const pid of pids) {
     if (pid === process.pid) continue
+    // 排除本应用当前运行的 dsh 服务进程（child），避免误杀正在服务的进程
+    if (child && pid === child.pid) continue
     try {
       killProcessTree(pid)
       logger.info(`已清理残留 dsh 进程：PID ${pid}`)
+      cleaned += 1
     } catch {
       /* 进程可能已退出 */
     }
   }
-  return pids.length
+  return cleaned
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +211,7 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
     if (svc.portMode === 'fixed' && typeof svc.port === 'number' && svc.port > 0) {
       port = await probeFreePort(svc.port, 1)
       if (port !== svc.port) {
-        return { ok: false, error: `端口 ${svc.port} 已被占用，请在「服务与运行」中更改或改为自动探测` }
+        return { ok: false, error: `端口 ${svc.port} 已被占用（可能是残留进程）。请先「清理残留进程」后重试，或改为自动探测` }
       }
     } else {
       port = await probeFreePort(3080)

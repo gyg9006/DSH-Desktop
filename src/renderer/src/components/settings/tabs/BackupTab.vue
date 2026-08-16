@@ -50,6 +50,12 @@ function formatTime(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/** 取文件名（渲染进程无 node:path）。 */
+function basename(p: string): string {
+  const parts = p.split(/[\\/]/)
+  return parts[parts.length - 1] || p
+}
+
 async function createBackup(): Promise<void> {
   busy.value = true
   try {
@@ -108,6 +114,37 @@ async function removeBackup(name: string): Promise<void> {
   await refresh()
 }
 
+/** 从外部备份文件恢复（选择任意 .zip，如换机后从 U 盘/网盘拷贝来的备份）。 */
+async function restoreFromFile(): Promise<void> {
+  const picked = await window.dshw.chooseFile('选择备份文件（backup-*.zip）', [{ name: '备份文件', extensions: ['zip'] }])
+  if (!picked.ok || !picked.path) return
+  try {
+    await ElMessageBox.confirm(
+      `恢复备份「${basename(picked.path)}」将用备份内容覆盖当前 data/skills/plugins/config 目录。` +
+        '\n\n注意：换机后请在新机器上重新执行环境检测安装，数据无损（备份不含运行环境）。' +
+        '\n\n此操作不可撤销，确定继续吗？',
+      '恢复备份（危险操作）',
+      { confirmButtonText: '确认恢复', cancelButtonText: '取消', type: 'error', confirmButtonClass: 'el-button--danger' }
+    )
+  } catch {
+    return
+  }
+  busy.value = true
+  try {
+    const result = await window.dshw.restoreBackup(picked.path)
+    if (result.ok) {
+      ElMessage.success('备份已恢复')
+      ElMessageBox.alert('恢复完成。为避免旧数据残留，建议重启应用（设置 → 日志与关于 → 重启）后再继续使用。', '恢复完成', {
+        confirmButtonText: '知道了'
+      }).catch(() => undefined)
+    } else {
+      ElMessage.error(result.error ?? '恢复失败')
+    }
+  } finally {
+    busy.value = false
+  }
+}
+
 async function exportAll(): Promise<void> {
   const picked = await window.dshw.chooseDirectory('选择导出目标位置（U 盘 / 网盘目录）')
   if (!picked.ok || !picked.path) return
@@ -143,6 +180,17 @@ const hasBackups = computed(() => backups.value.length > 0)
             <div class="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">带时间戳 zip 存入 backups/</div>
           </div>
           <el-button size="small" type="primary" :loading="busy" @click="createBackup()">一键备份</el-button>
+        </div>
+      </section>
+
+      <!-- 6.23 从备份文件恢复（独立入口，换机/应急时使用） -->
+      <section class="rounded-lg border border-gray-100 p-3 dark:border-[#23262C]">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-xs font-medium text-gray-700 dark:text-gray-200">从备份文件恢复</div>
+            <div class="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">选择任意 backup-*.zip 恢复（含从 U 盘 / 网盘拷贝来的备份），将覆盖当前 data / skills / plugins / config</div>
+          </div>
+          <el-button size="small" type="warning" plain :loading="busy" @click="restoreFromFile()">选择备份并恢复</el-button>
         </div>
       </section>
 
@@ -190,7 +238,7 @@ const hasBackups = computed(() => backups.value.length > 0)
             <el-button size="small" text @click="removeBackup(entry.name)">删除</el-button>
           </div>
         </div>
-        <p v-else class="text-xs text-gray-400 dark:text-gray-500">暂无备份</p>
+        <p v-else class="text-xs text-gray-400 dark:text-gray-500">暂无备份。可使用上方「从备份文件恢复」选择外部备份，或先「一键备份」。</p>
       </section>
 
       <!-- 6.24 导出全部 -->

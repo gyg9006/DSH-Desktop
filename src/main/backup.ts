@@ -84,6 +84,28 @@ export function listBackups(workspaceDir: string): BackupEntry[] {
 /** 恢复备份：解压覆盖到工作文件夹（规格 6.23，调用前 UI 已红字二次确认）。 */
 export async function restoreBackup(workspaceDir: string, zipPath: string): Promise<{ ok: boolean; error?: string }> {
   if (!fs.existsSync(zipPath)) return { ok: false, error: '备份文件不存在' }
+  const ext = path.extname(zipPath).toLowerCase()
+  if (ext !== '.zip') return { ok: false, error: '请选择 .zip 备份文件' }
+
+  // 安全校验：仅允许备份白名单顶层目录，拒绝路径穿越（../、绝对路径）。
+  const listing = await runCommand({ command: 'tar', args: ['-tf', zipPath], timeoutMs: ZIP_TIMEOUT_MS })
+  if (listing.error || listing.code !== 0) return { ok: false, error: `无法读取备份内容：${listing.error ?? `exit ${listing.code}`}` }
+  const entries = (listing.stdout ?? '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+  if (entries.length === 0) return { ok: false, error: '备份文件内容为空' }
+  for (const entry of entries) {
+    const normalized = entry.replace(/\\/g, '/')
+    if (normalized.startsWith('/') || normalized.includes('..') || /^[a-zA-Z]:/.test(normalized)) {
+      return { ok: false, error: `备份内容异常，已拒绝恢复：${entry}` }
+    }
+    const top = normalized.split('/')[0]
+    if (!(BACKUP_DIRS as readonly string[]).includes(top)) {
+      return { ok: false, error: `备份包含非业务目录「${top}」，已拒绝恢复` }
+    }
+  }
+
   const result = await runCommand({
     command: 'tar',
     args: ['-xf', zipPath, '-C', workspaceDir],

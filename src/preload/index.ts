@@ -270,6 +270,13 @@ const api = {
   chooseDirectory: (title: string): Promise<{ ok: boolean; canceled?: boolean; path?: string }> =>
     ipcRenderer.invoke(IPC.DialogChooseDirectory, title),
 
+  /** 通用文件选择框（可带扩展名过滤）。 */
+  chooseFile: (
+    title: string,
+    filters?: { name?: string; extensions: string[] }[]
+  ): Promise<{ ok: boolean; canceled?: boolean; path?: string }> =>
+    ipcRenderer.invoke(IPC.DialogChooseFile, title, filters),
+
   /** 订阅主进程 UI 事件（全局快捷键触发）；返回取消订阅函数。 */
   onUiEvent: (callback: (type: UiEventType) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, type: UiEventType): void => callback(type)

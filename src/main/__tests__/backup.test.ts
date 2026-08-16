@@ -113,4 +113,34 @@ describe('createBackup / listBackups / restoreBackup / pruneBackups（真实 tar
     expect(deleteBackup(ws, '../evil.zip').ok).toBe(false)
     expect(deleteBackup(ws, 'notes.txt').ok).toBe(false)
   })
+
+  it('restoreBackup 拒绝非 .zip 文件', async () => {
+    const ws = makeTempDir()
+    makeWs(ws)
+    const fake = path.join(ws, 'not-a-backup.txt')
+    fs.writeFileSync(fake, 'hello')
+    const r = await restoreBackup(ws, fake)
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('.zip')
+  })
+
+  it('restoreBackup 拒绝包含白名单外顶层目录的 zip', async () => {
+    const ws = makeTempDir()
+    makeWs(ws)
+    const evilZip = path.join(ws, 'evil.zip')
+    const { execSync } = await import('node:child_process')
+    // 构造含 runtime/ 的 zip（非白名单目录）
+    fs.mkdirSync(path.join(ws, 'runtime', 'node'), { recursive: true })
+    execSync(`tar -a -cf "${evilZip}" -C "${ws}" data skills runtime`, { stdio: 'ignore' })
+    const r = await restoreBackup(ws, evilZip)
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('runtime')
+  })
+
+  it('restoreBackup 拒绝不存在的文件', async () => {
+    const ws = makeTempDir()
+    const r = await restoreBackup(ws, path.join(ws, 'missing.zip'))
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('不存在')
+  })
 })

@@ -78,6 +78,7 @@ export const IPC = {
   AppCheckUpdate: 'app:check-update',
   AppSetLoginItem: 'app:set-login-item',
   DialogChooseDirectory: 'dialog:choose-directory',
+  DialogChooseFile: 'dialog:choose-file',
   AppReset: 'app:reset',
   SyncGet: 'sync:get',
   SyncSet: 'sync:set',

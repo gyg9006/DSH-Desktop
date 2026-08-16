@@ -597,6 +597,16 @@ export function registerIpcHandlers(): void {
     return { ok: true, path: result.filePaths[0] }
   })
 
+  ipcMain.handle(IPC.DialogChooseFile, async (_event, title: string, filters?: { name?: string; extensions: string[] }[]) => {
+    const result = await dialog.showOpenDialog({
+      title: String(title ?? '选择文件'),
+      properties: ['openFile'],
+      filters: Array.isArray(filters) && filters.length > 0 ? (filters as Electron.FileFilter[]) : undefined
+    })
+    if (result.canceled || result.filePaths.length === 0) return { ok: false, canceled: true }
+    return { ok: true, path: result.filePaths[0] }
+  })
+
   // ---------- 初始化（出厂重置） ----------
   ipcMain.handle(IPC.AppReset, async (_event, keepRuntime: boolean) => {
     const result = await resetApp(keepRuntime !== false)

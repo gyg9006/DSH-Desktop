@@ -23,8 +23,9 @@ npm-debug.log*
 workspace/*
 !workspace/.gitkeep
 
-# 截图目录（自行补充后提交）
+# 截图目录（README 引用的真实界面截图）
 screenshots/*
+!screenshots/*.png
 !screenshots/.gitkeep
 
 # 编辑器

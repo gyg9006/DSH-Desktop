@@ -1,6 +1,6 @@
 {
   "name": "dsh-workbench",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "DSH 桌面 —— DeepSeek Harness 便携式 Windows 桌面客户端（绿色免安装、零残留）",
   "main": "./out/main/index.js",
   "author": {
@@ -11,48 +11,7 @@
     "type": "git",
     "url": "https://github.com/gyg9006/DSH-Desktop.git"
   },
-  "keywords": [
-    "deepseek",
-    "deepseek-harness",
-    "dsh",
-    "electron",
-    "desktop",
-    "portable",
-    "windows",
-    "vue"
-  ],
-  "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "start": "electron-vite preview",
-    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
-    "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
-    "typecheck": "npm run typecheck:node && npm run typecheck:web",
-    "test": "vitest run",
-    "gen:icon": "node scripts/gen-icon.mjs",
-    "pack:dir": "npm run build && node scripts/gen-icon.mjs && electron-builder --win dir && node scripts/flatten-build.mjs",
-    "release:zip": "node scripts/release.mjs"
-  },
   "dependencies": {
     "js-yaml": "^4.1.0"
-  },
-  "devDependencies": {
-    "@element-plus/icons-vue": "^2.3.2",
-    "@types/js-yaml": "^4.0.9",
-    "@types/node": "^24.0.0",
-    "@vitejs/plugin-vue": "^6.0.8",
-    "autoprefixer": "^10.5.4",
-    "electron": "^43.4.0",
-    "electron-builder": "^26.15.3",
-    "electron-vite": "^5.0.0",
-    "element-plus": "^2.14.4",
-    "pinia": "^4.0.3",
-    "postcss": "^8.5.26",
-    "tailwindcss": "^3.4.19",
-    "typescript": "^5.9.0",
-    "vite": "^7.3.6",
-    "vitest": "^4.1.10",
-    "vue": "^3.5.41",
-    "vue-tsc": "^3.3.10"
   }
 }

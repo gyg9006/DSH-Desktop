@@ -74,7 +74,7 @@ function injectSidebarHelper(): void {
       if (status === 'ready' || status === 'exists') {
         const show = appStore.config?.showDshSidebar === true
         dshSidebarVisible.value = show
-        // insertCSS：隐藏样式提前生效（body 属性开关，刷新/切视图时不再闪显 dsh 侧边栏）
+        // insertCSS：隐藏样式提前生效（刷新/切视图时不再闪显 dsh 侧边栏）
         wv.executeJavaScript(`(() => {
           const cls = window.__dshwSidebarHelper ? window.__dshwSidebarHelper.railClass : ''
           window.__dshwSidebarHelper ? window.__dshwSidebarHelper.set(${show ? 'true' : 'false'}) : null
@@ -84,7 +84,11 @@ function injectSidebarHelper(): void {
             const c = String(cls ?? '')
             if (!c) return
             try {
-              wv.insertCSS(`body[data-dshw-rail] .${c} { display: none !important; }`)
+              // 默认隐藏该栏；用户开启 dsh 侧边栏时通过属性撤销
+              const hideRule = show
+                ? `body[data-dshw-rail] .${c} { display: none !important; }`
+                : `.${c} { display: none !important; }`
+              wv.insertCSS(hideRule)
             } catch {
               // 老版本 API 不支持时忽略
             }
@@ -114,6 +118,10 @@ function attachWebviewListeners(): void {
   if (!wv) return
   wv.addEventListener('did-fail-load', () => {
     webviewError.value = true
+  })
+  // 页面一开始加载就尝试隐藏 dsh 侧边栏，避免闪烁（insertCSS 已注入的 CSS 在 reload 后持续生效）
+  wv.addEventListener('did-start-loading', () => {
+    injectSidebarHelper()
   })
   wv.addEventListener('did-finish-load', () => {
     webviewError.value = false
@@ -188,37 +196,21 @@ function handleGuestAction(event: Event): void {
       .then(() => wv.reload())
       .catch(() => undefined)
   } else if (action === 'open-session') {
-    // 打开指定会话：dsh 会话列表在侧边栏（默认隐藏+折叠），需临时展开、显示并点击 treeitem。
-    // 点击后恢复侧边栏隐藏状态（ms 级，用户几乎无感知）。
-    const title = String(detail?.payload ?? '')
-    if (!title) return
-    wv.executeJavaScript(`(async () => {
-      const t = ${JSON.stringify(title)}
-      // 1. 临时显示侧边栏（解除我们的隐藏）
-      if (window.__dshwSidebarHelper) window.__dshwSidebarHelper.set(true)
-      // 2. 展开折叠的侧边栏（dsh 的「打开侧边栏」按钮）
-      const openToggle = [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || '').includes('打开侧边栏'))
-      if (openToggle) openToggle.click()
-      // 3. 等待树渲染，点击目标会话（标题精确匹配优先，其次包含匹配）
-      const deadline = Date.now() + 5000
-      const findAndClick = () => {
-        const items = [...document.querySelectorAll('[role=treeitem]')]
-        const exact = items.find(el => (el.innerText || '').trim().startsWith(t) || (el.innerText || '').includes(t))
-        const loose = exact || items.find(el => (el.innerText || '').includes(t))
-        if (loose) { loose.click(); return true }
-        return false
-      }
-      let ok = findAndClick()
-      while (!ok && Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 250))
-        ok = findAndClick()
-      }
-      // 4. 恢复隐藏
-      if (window.__dshwSidebarHelper) window.__dshwSidebarHelper.set(false)
-      const closeToggle = [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || '').includes('收起侧边栏'))
-      if (closeToggle) closeToggle.click()
-      return ok ? 'opened' : 'no-hit'
-    })()`).catch(() => undefined)
+    // 打开指定会话：dsh 的当前会话持久化在 localStorage['dsh.sessions.current']。
+    // 直接写入并刷新 webview，dsh 启动时会恢复该会话——无需操作 dsh 侧边栏，桌面端侧边栏完全接管。
+    const payload = (detail?.payload ?? {}) as { id?: unknown; title?: unknown }
+    const sessionId = String(payload.id ?? '')
+    if (!sessionId) return
+    wv.executeJavaScript(`(() => {
+      try {
+        localStorage.setItem('dsh.sessions.current', JSON.stringify({ sessionId: ${JSON.stringify(sessionId)} }))
+        return 'set'
+      } catch (e) { return 'ERR:' + e.message }
+    })()`)
+      .then((r: unknown) => {
+        if (String(r) === 'set') wv.reload()
+      })
+      .catch(() => undefined)
   }
 }
 

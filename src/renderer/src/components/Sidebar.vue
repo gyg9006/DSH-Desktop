@@ -324,7 +324,7 @@ async function startChat(): Promise<void> {
 }
 
 function openSession(session: WorkspaceSessionEntry): void {
-  window.dispatchEvent(new CustomEvent('dshw:guest-action', { detail: { action: 'open-session', payload: session.title } }))
+  window.dispatchEvent(new CustomEvent('dshw:guest-action', { detail: { action: 'open-session', payload: { id: session.id, title: session.title } } }))
 }
 
 // ---------- 工作区动作 ----------

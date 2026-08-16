@@ -7,11 +7,18 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { zstdCompress, zstdDecompress } from 'node:zlib'
+import { promisify } from 'node:util'
 import { readJsonFile, writeJsonAtomic } from '../shared/workspace'
 import { runCommand } from './utils/process'
+import { logger } from './logger'
 import type { SessionEntry } from '../shared/ipc'
 
+const zstdCompressAsync = promisify(zstdCompress)
+const zstdDecompressAsync = promisify(zstdDecompress)
+
 const SESSION_FILE_RE = /^session\.jsonl(\.zstd)?$/
+const ZSTD_SUFFIX = '.jsonl.zstd'
 
 /** 常见压缩包扩展名（导入时自动解压）。 */
 const ARCHIVE_RE = /\.(zip|tar|tgz|tar\.gz|gz)$/i
@@ -256,6 +263,93 @@ function sessionIdExists(sessionsRoot: string, id: string): boolean {
   return false
 }
 
+// ---------------------------------------------------------------------------
+// 会话文件压缩格式适配
+// dsh 的 session-persistence-jsonl 按 compression（默认 zstd）扫描整个 sessions 根，
+// 遇到相反编码的会话文件会抛错阻止启动。导入时必须把会话转换到目标压缩格式。
+// ---------------------------------------------------------------------------
+
+export type SessionCompression = 'zstd' | 'none'
+
+/** 读取 dsh 配置的会话压缩格式（settings.yaml 的 session-persistence-jsonl.compression，缺省 zstd）。 */
+export function getDshSessionCompression(workspaceDir: string): SessionCompression {
+  try {
+    const raw = fs.readFileSync(path.join(workspaceDir, 'data', 'settings.yaml'), 'utf8')
+    const m = raw.match(/^session-persistence-jsonl:[\s\S]*?^(\s*)compression:\s*(\w+)/m)
+    if (m && m[2] === 'none') return 'none'
+    const flat = raw.match(/^compression:\s*(\w+)/m)
+    if (flat && flat[1] === 'none') return 'none'
+  } catch {
+    /* 忽略 */
+  }
+  return 'zstd'
+}
+
+/** 判断文件名是否为 zstd 压缩的会话日志。 */
+function isZstdFile(name: string): boolean {
+  return name === ZSTD_SUFFIX || name.endsWith(ZSTD_SUFFIX) || (name.endsWith('.zstd') && name.includes('.jsonl'))
+}
+
+/** 把单个会话文件转换到目标压缩格式（就地替换 + 删除原文件）。 */
+export async function convertSessionFile(filePath: string, target: SessionCompression): Promise<void> {
+  const name = path.basename(filePath)
+  const dir = path.dirname(filePath)
+  const currentZstd = isZstdFile(name)
+  const wantZstd = target === 'zstd'
+  if (currentZstd === wantZstd) return
+
+  const data = fs.readFileSync(filePath)
+  let converted: Buffer
+  if (wantZstd) {
+    converted = await zstdCompressAsync(data)
+  } else {
+    converted = await zstdDecompressAsync(data)
+  }
+  const destName = wantZstd ? 'session.jsonl.zstd' : 'session.jsonl'
+  fs.writeFileSync(path.join(dir, destName), converted)
+  fs.rmSync(filePath, { force: true })
+}
+
+/** 把会话目录内的 session 日志转换到目标压缩格式（兼容 session.jsonl / session.jsonl.zstd 两种命名）。 */
+export async function convertSessionDirEncoding(sessionDir: string, target: SessionCompression): Promise<void> {
+  if (!fs.existsSync(sessionDir)) return
+  for (const f of fs.readdirSync(sessionDir)) {
+    if (!SESSION_FILE_RE.test(f)) continue
+    await convertSessionFile(path.join(sessionDir, f), target)
+  }
+}
+
+/**
+ * 扫描整个 sessions 根，把与 dsh 配置压缩格式不符的会话日志就地转换为目标格式。
+ * dsh 的 session-persistence-jsonl 启动时全根校验，格式不符会直接抛错阻止服务启动；
+ * 该修复在服务启动前执行，保证任何来源导入的会话（压缩/未压缩）都能被正常加载。
+ * 返回转换的会话目录数。
+ */
+export async function repairSessionEncodings(workspaceDir: string): Promise<{ fixed: number; target: SessionCompression }> {
+  const sessionsRoot = path.join(workspaceDir, 'data', 'sessions')
+  if (!fs.existsSync(sessionsRoot)) return { fixed: 0, target: 'zstd' }
+  const target = getDshSessionCompression(workspaceDir)
+  let fixed = 0
+  const walk = async (dir: string): Promise<void> => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        await walk(full)
+      } else if (SESSION_FILE_RE.test(entry.name)) {
+        const currentZstd = isZstdFile(entry.name)
+        const wantZstd = target === 'zstd'
+        if (currentZstd !== wantZstd) {
+          await convertSessionFile(full, target)
+          fixed += 1
+        }
+      }
+    }
+  }
+  await walk(sessionsRoot)
+  if (fixed > 0) logger.info(`会话编码修复：${fixed} 个会话已转换到 ${target} 格式`)
+  return { fixed, target }
+}
+
 /**
  * 从外部路径导入会话：源可以是会话目录、单个会话文件或含会话的目录树（可多选混搭）。
  * 按 dsh 布局复制到 data/sessions/<来源名>/<会话id>/；id 冲突（全局）时重命名。
@@ -266,12 +360,12 @@ function sessionIdExists(sessionsRoot: string, id: string): boolean {
  * - archiveRoots：压缩包解压根目录集合——这些目录一律按「树」处理（不做单会话目录判定），
  *   避免含多个会话的压缩包被误认为单个会话目录。
  */
-export function importSessionsFrom(
+export async function importSessionsFrom(
   workspaceDir: string,
   sourcePaths: string[],
   targetWorkspacePath?: string,
   archiveRoots?: Set<string>
-): { ok: boolean; count: number; error?: string } {
+): Promise<{ ok: boolean; count: number; error?: string }> {
   const sessionsRoot = path.join(workspaceDir, 'data', 'sessions')
   fs.mkdirSync(sessionsRoot, { recursive: true })
   let imported = 0
@@ -314,6 +408,9 @@ export function importSessionsFrom(
       }
     }
 
+    // 目标压缩格式（dsh 配置，缺省 zstd）
+    const targetCompression = getDshSessionCompression(workspaceDir)
+
     for (const { srcDir: dir, id, standaloneFile } of toImport) {
       // 来源名：目标工作区路径转义（指定时），否则源路径父目录名
       const sourceName = targetWorkspacePath
@@ -332,6 +429,8 @@ export function importSessionsFrom(
       for (const f of files) {
         fs.copyFileSync(path.join(dir, f), path.join(destDir, f))
       }
+      // 压缩格式适配：目标目录里的会话日志必须与 dsh 配置一致，否则服务无法启动
+      await convertSessionDirEncoding(destDir, targetCompression)
       imported += 1
     }
     return { ok: true, count: imported }

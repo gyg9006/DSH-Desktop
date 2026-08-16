@@ -336,7 +336,7 @@ export function registerIpcHandlers(): void {
     // 压缩包自动解压后导入
     const expanded = await expandImportArchives(getWorkspaceDir(), result.filePaths)
     try {
-      const imported = importSessionsFrom(getWorkspaceDir(), expanded.paths, wsPath, expanded.archiveRoots)
+      const imported = await importSessionsFrom(getWorkspaceDir(), expanded.paths, wsPath, expanded.archiveRoots)
       return { ok: imported.ok, count: imported.count, error: imported.error }
     } finally {
       expanded.cleanup()

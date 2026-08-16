@@ -14,6 +14,7 @@ import { getWorkspaceDir, readAppConfig, updateAppConfig } from './config'
 import { buildDshEnv } from './envCheck'
 import { runCommand, killProcessTree } from './utils/process'
 import { readApiConfig, buildProxyEnv } from './apiConfig'
+import { repairSessionEncodings } from './sessions'
 import type { ServiceStatus } from '../shared/ipc'
 
 export interface ServiceSnapshot {
@@ -185,6 +186,15 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
   // 清理上次残留（避免僵尸进程与端口占用）
   const cleaned = await cleanupStaleDsh()
   if (cleaned > 0) pushLog(`已清理残留 dsh 进程 ${cleaned} 个`)
+
+  // 会话编码修复：dsh 启动时会全根校验压缩格式，格式不符直接抛错。
+  // 此处把任何来源导入的会话（.jsonl / .jsonl.zstd）统一转换为当前配置格式，保证服务可启动。
+  try {
+    const { fixed, target } = await repairSessionEncodings(workspaceDir)
+    if (fixed > 0) pushLog(`已自动修复 ${fixed} 个会话的存储格式（${target === 'zstd' ? 'zstd 压缩' : '未压缩'}）`)
+  } catch (error) {
+    pushLog(`会话格式检查失败：${error instanceof Error ? error.message : String(error)}`)
+  }
 
   // 端口：auto 探测 / fixed 校验
   const config = readAppConfig()

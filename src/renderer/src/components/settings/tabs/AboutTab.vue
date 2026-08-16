@@ -240,6 +240,28 @@ async function confirmReset(keepRuntime: boolean): Promise<void> {
   <div>
     <h3 class="text-base font-semibold text-gray-800 dark:text-gray-100">日志与关于</h3>
 
+    <!-- 版本信息卡片（醒目展示客户端版本号） -->
+    <section class="mt-4 rounded-lg border border-gray-100 bg-gradient-to-r from-[#F7F9FF] to-white p-4 dark:border-[#23262C] dark:from-[#171A20] dark:to-[#15171B]">
+      <div class="flex items-center gap-3">
+        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#1E2A78] to-[#3B82F6] text-sm font-bold text-white">DSH</div>
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-gray-800 dark:text-gray-100">DSH 桌面</div>
+          <div class="text-[11px] text-gray-400 dark:text-gray-500">DeepSeek Harness 便携式桌面客户端</div>
+        </div>
+        <div class="flex-1"></div>
+        <div class="text-right">
+          <div class="text-2xl font-bold text-gray-900 dark:text-gray-50">v{{ about.appVersion }}</div>
+          <div class="text-[10px] text-gray-400 dark:text-gray-500">客户端版本</div>
+        </div>
+      </div>
+      <div class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400 sm:grid-cols-4">
+        <span>dsh：<strong class="font-medium text-gray-700 dark:text-gray-200">{{ about.dshVersion }}</strong></span>
+        <span>Node：<strong class="font-medium text-gray-700 dark:text-gray-200">{{ about.nodeVersion }}</strong></span>
+        <span>Git：<strong class="font-medium text-gray-700 dark:text-gray-200">{{ about.gitVersion }}</strong></span>
+        <span>Electron：<strong class="font-medium text-gray-700 dark:text-gray-200">{{ about.electron }}</strong></span>
+      </div>
+    </section>
+
     <!-- 6.26 日志 -->
     <section class="mt-4">
       <div class="mb-2 flex flex-wrap items-center gap-2">

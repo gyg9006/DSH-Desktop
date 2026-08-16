@@ -131,7 +131,9 @@ async function doInstall(pkg: NpmPluginHitPayload): Promise<void> {
     if (result.log) opLog.value = result.log
     if (result.ok) {
       ElMessage.success(
-        result.bundle ? '安装完成，插件已注册为 profile 层（重启 dsh 服务后生效）' : '安装完成（该包未声明 dsh.bundle，需在 dsh 中确认加载方式）'
+        result.bundle
+          ? '插件已安装（profile 层，重启服务生效）。注意：这是插件不是技能，如需对话技能请到「推荐技能」页'
+          : '安装完成（该包未声明 dsh.bundle，需在 dsh 中确认加载方式）'
       )
       await refreshPlugins()
     } else {
@@ -206,8 +208,9 @@ function fmtDate(d: string): string {
   <div>
     <h3 class="text-base font-semibold text-gray-800 dark:text-gray-100">插件与技能</h3>
     <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-      功能插件随 dsh 自带、离线启用；在线市场从 npm 检索安装（支持中文功能词搜索）；
-      推荐技能来自知名开源技能库（GitHub / npm），安装后可在对话中直接使用。
+      <strong class="text-gray-600 dark:text-gray-300">插件</strong>（功能插件 / 在线市场）与<strong class="text-gray-600 dark:text-gray-300">技能</strong>（推荐技能）是两类不同的东西：
+      插件是扩展 dsh 自身功能的 npm 包（工具、命令等），装进 dsh profile；技能是对话中可直接调用的技能目录（SKILL.md），装进 workspace/skills。
+      <strong class="text-gray-600 dark:text-gray-300">在线市场安装的是插件，不是技能</strong>；如需技能请到「推荐技能」页安装。
       启用/安装后需<strong class="text-gray-600 dark:text-gray-300">重启 dsh 服务</strong>生效。
     </p>
 
@@ -265,18 +268,21 @@ function fmtDate(d: string): string {
         </div>
       </el-tab-pane>
 
-      <!-- 在线市场 -->
-      <el-tab-pane label="在线市场">
+      <!-- 在线插件市场（注意：装的是插件，不是技能） -->
+      <el-tab-pane label="在线插件市场">
         <div class="flex items-center gap-2">
           <el-input
             v-model="query"
             size="small"
-            placeholder="搜索插件：支持中文功能词（如「搜索」「数据库」「mcp」）或插件名"
+            placeholder="搜索插件（非技能）：支持中文功能词（如「搜索」「数据库」「mcp」）或插件名"
             clearable
             @keyup.enter="doSearch()"
           />
           <el-button size="small" type="primary" :icon="Search" :loading="searching" @click="doSearch()">搜索</el-button>
         </div>
+        <p class="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+          这里搜索并安装的是 <strong>dsh 插件</strong>（npm cordis 插件，扩展 dsh 自身功能）。插件不是技能——安装后请到「推荐技能」页安装对话技能；在对话中调用技能请用技能名。
+        </p>
         <p v-if="searchError" class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ searchError }}</p>
 
         <div v-if="searched && hits.length > 0" class="mt-3 space-y-2">
@@ -378,6 +384,7 @@ function fmtDate(d: string): string {
         </div>
         <p class="mt-3 text-[11px] text-gray-400 dark:text-gray-500">
           技能来自社区推崇的开源技能库（含 anthropics/skills 与 obra/superpowers 等），经 npmmirror 技能合集直装，无需 GitHub。
+          安装后技能出现在对话的技能列表中（workspace/skills）；这与「在线插件市场」安装的 dsh 插件（扩展 dsh 功能）不同。
         </p>
       </el-tab-pane>
 

@@ -295,7 +295,8 @@ async function importSessions(mode: 'folder' | 'file', targetWorkspacePath?: str
   try {
     const result = await window.dshw.importSessions(mode, targetWorkspacePath)
     if (result.ok) {
-      ElMessage.success(`已导入 ${result.count} 个会话`)
+      const skip = result.skipped && result.skipped > 0 ? `，${result.skipped} 个已存在跳过` : ''
+      ElMessage.success(`已导入 ${result.count} 个会话${skip}`)
     } else if (!result.canceled) {
       ElMessage.error(result.error ?? '导入失败')
     }
@@ -501,7 +502,8 @@ async function doImportToWorkspace(ws: WorkspaceEntryPayload, mode: 'folder' | '
   try {
     const result = await window.dshw.importSessions(mode, ws.path)
     if (result.ok) {
-      ElMessage.success(`已导入 ${result.count} 个会话`)
+      const skip = result.skipped && result.skipped > 0 ? `，${result.skipped} 个已存在跳过` : ''
+      ElMessage.success(`已导入 ${result.count} 个会话${skip}`)
     } else if (!result.canceled) {
       ElMessage.error(result.error ?? '导入失败')
     }

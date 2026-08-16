@@ -337,7 +337,7 @@ export function registerIpcHandlers(): void {
     const expanded = await expandImportArchives(getWorkspaceDir(), result.filePaths)
     try {
       const imported = await importSessionsFrom(getWorkspaceDir(), expanded.paths, wsPath, expanded.archiveRoots)
-      return { ok: imported.ok, count: imported.count, error: imported.error }
+      return { ok: imported.ok, count: imported.count, skipped: imported.skipped, error: imported.error }
     } finally {
       expanded.cleanup()
     }

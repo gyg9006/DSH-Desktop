@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { importSessionsFrom, expandImportArchives, getDshSessionCompression, repairSessionEncodings } from '../sessions'
+import { importSessionsFrom, expandImportArchives, getDshSessionCompression, repairSessionEncodings, dshProjectKey } from '../sessions'
 
 const tempDirs: string[] = []
 
@@ -65,28 +65,30 @@ describe('importSessionsFrom（导入其他 PC 的 dsh 会话）', () => {
     expect(findSession(ws, 'session-2')).not.toBeNull()
   })
 
-  it('id 冲突时自动重命名，不覆盖本地', async () => {
+  it('id 冲突时跳过，不覆盖本地、不重复导入', async () => {
     const ws = makeTempDir()
     const src = makeTempDir()
     makeSessionDir(src, 'session-x')
-    // 本地已有同名会话
-    const local = path.join(ws, 'data', 'sessions', 'local', 'session-x')
+    // 本地已有同名会话（真实 dsh 会话 id 全局唯一，重复导入会触发 dsh duplicate 报错）
+    const local = path.join(ws, 'data', 'sessions', '--local--', 'session-x')
     fs.mkdirSync(local, { recursive: true })
     fs.writeFileSync(path.join(local, 'session.jsonl.zstd'), 'local-data')
     const result = await importSessionsFrom(ws, [src])
     expect(result.ok).toBe(true)
+    expect(result.count).toBe(0)
+    expect(result.skipped).toBe(1)
     // 本地未被覆盖
     expect(fs.readFileSync(path.join(local, 'session.jsonl.zstd'), 'utf8')).toBe('local-data')
-    // 导入的会话被重命名（id 前缀保留）
+    // 没有产生额外副本
     const root = path.join(ws, 'data', 'sessions')
-    const renamedIds: string[] = []
+    let copies = 0
     for (const group of fs.readdirSync(root, { withFileTypes: true })) {
       if (!group.isDirectory()) continue
       for (const entry of fs.readdirSync(path.join(root, group.name), { withFileTypes: true })) {
-        if (entry.isDirectory() && entry.name.startsWith('session-x-imported-')) renamedIds.push(entry.name)
+        if (entry.isDirectory() && entry.name === 'session-x') copies++
       }
     }
-    expect(renamedIds.length).toBe(1)
+    expect(copies).toBe(1)
   })
 
   it('不存在的源忽略', async () => {
@@ -157,6 +159,77 @@ describe('importSessionsFrom（导入其他 PC 的 dsh 会话）', () => {
     }
     // 临时目录已清理
     expect(fs.existsSync(path.join(ws, 'tmp')) ? fs.readdirSync(path.join(ws, 'tmp')).length : 0).toBe(0)
+  })
+
+  it('dshProjectKey：F:\\deepseek_workspace → --F-deepseek_workspace--（dsh 规则）', () => {
+    expect(dshProjectKey('F:\\deepseek_workspace')).toBe('--F-deepseek_workspace--')
+    expect(dshProjectKey('C:\\Users\\test\\project')).toBe('--C-Users-test-project--')
+    expect(dshProjectKey('')).toBe('--imported--')
+  })
+
+  it('按日志 header 的 id/cwd 定位导入（目录名无关，保证 dsh 可加载）', async () => {
+    const ws = makeTempDir()
+    const src = makeTempDir()
+    // 会话目录名随意（session / 任意名），但 header 里有真实 id 与 cwd
+    const dir = path.join(src, 'session')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, 'session.jsonl'),
+      '{"type":"session","version":0,"id":"session-real-123","cwd":"D:\\\\other\\\\project"}\n{"type":"msg","seq":0}\n'
+    )
+    const result = await importSessionsFrom(ws, [dir])
+    expect(result.ok).toBe(true)
+    expect(result.count).toBe(1)
+    // 必须落在 dsh projectKey 组 + header id 目录
+    const target = path.join(ws, 'data', 'sessions', '--D-other-project--', 'session-real-123')
+    expect(fs.existsSync(path.join(target, 'session.jsonl.zstd'))).toBe(true)
+  })
+
+  it('header id 与目录名不一致时以 header id 为准', async () => {
+    const ws = makeTempDir()
+    const src = makeTempDir()
+    const dir = path.join(src, 'wrong-dir-name')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, 'session.jsonl'),
+      '{"type":"session","version":0,"id":"session-correct-id","cwd":"C:\\\\ws"}\n'
+    )
+    const result = await importSessionsFrom(ws, [dir])
+    expect(result.ok).toBe(true)
+    expect(result.count).toBe(1)
+    expect(fs.existsSync(path.join(ws, 'data', 'sessions', '--C-ws--', 'session-correct-id', 'session.jsonl.zstd'))).toBe(true)
+  })
+
+  it('导入后登记到工作区注册表（cwd 匹配的 workspace 的 sessionIds）', async () => {
+    const ws = makeTempDir()
+    // 预置注册表：workspace path = F:\work，sessionIds 空
+    fs.mkdirSync(path.join(ws, 'data', 'storages'), { recursive: true })
+    fs.writeFileSync(
+      path.join(ws, 'data', 'storages', 'workspace.json'),
+      JSON.stringify({
+        unit: { name: 'workspace', version: 2 },
+        global: { initialized: true, workspaceIds: ['ws-1'], archivedSessionIds: [] },
+        tables: {
+          workspaces: {
+            'ws-1': { path: 'F:\\work', title: 'work', sessionIds: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }
+          }
+        }
+      })
+    )
+    const src = makeTempDir()
+    const dir = path.join(src, 'session')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, 'session.jsonl'),
+      '{"type":"session","version":0,"id":"session-reg-1","cwd":"F:\\\\work"}\n{"type":"msg","seq":0}\n'
+    )
+    const result = await importSessionsFrom(ws, [dir])
+    expect(result.ok).toBe(true)
+    expect(result.count).toBe(1)
+    const registry = JSON.parse(fs.readFileSync(path.join(ws, 'data', 'storages', 'workspace.json'), 'utf8')) as {
+      tables: { workspaces: Record<string, { sessionIds: string[] }> }
+    }
+    expect(registry.tables.workspaces['ws-1'].sessionIds).toContain('session-reg-1')
   })
 })
 

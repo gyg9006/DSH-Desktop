@@ -154,7 +154,7 @@ const api = {
   deleteSession: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke(IPC.SessionsDelete, id),
 
   /** 导入会话（选择其他电脑的 dsh 会话目录/文件）。 */
-  importSessions: (mode: 'folder' | 'file', targetWorkspacePath?: string): Promise<{ ok: boolean; canceled?: boolean; count: number; error?: string }> =>
+  importSessions: (mode: 'folder' | 'file', targetWorkspacePath?: string): Promise<{ ok: boolean; canceled?: boolean; count: number; skipped?: number; error?: string }> =>
     ipcRenderer.invoke(IPC.SessionsImport, mode, targetWorkspacePath),
   openPath: (p: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke(IPC.OpenPath, p),
 

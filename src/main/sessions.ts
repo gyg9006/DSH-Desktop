@@ -7,7 +7,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { zstdCompress, zstdDecompress } from 'node:zlib'
+import { zstdCompress, createZstdDecompress, constants as zlibConstants } from 'node:zlib'
 import { promisify } from 'node:util'
 import { readJsonFile, writeJsonAtomic } from '../shared/workspace'
 import { runCommand } from './utils/process'
@@ -15,7 +15,6 @@ import { logger } from './logger'
 import type { SessionEntry } from '../shared/ipc'
 
 const zstdCompressAsync = promisify(zstdCompress)
-const zstdDecompressAsync = promisify(zstdDecompress)
 
 const SESSION_FILE_RE = /^session\.jsonl(\.zstd)?$/
 const ZSTD_SUFFIX = '.jsonl.zstd'
@@ -290,7 +289,21 @@ function isZstdFile(name: string): boolean {
   return name === ZSTD_SUFFIX || name.endsWith(ZSTD_SUFFIX) || (name.endsWith('.zstd') && name.includes('.jsonl'))
 }
 
-/** 把单个会话文件转换到目标压缩格式（就地替换 + 删除原文件）。 */
+// dsh 的 zstd 会话文件是「分帧」结构：header 行单独一个可独立解码的 zstd 帧，
+// 之后每个事件批次一个帧（compressZstdFrame 带 checksum）。启动时校验第一帧
+// 解压后必须恰好是 header 一行（assertZstdHeaderFrame）。因此转换到 zstd 时
+// 必须保持同样分帧，否则 dsh 会报 "first frame is not exactly one header line"。
+const ZSTD_CHECKSUM_OPTIONS = { params: { [zlibConstants.ZSTD_c_checksumFlag]: 1 } }
+
+function zstdCompressFrameAsync(input: Buffer): Promise<Buffer> {
+  return zstdCompressAsync(input, ZSTD_CHECKSUM_OPTIONS)
+}
+
+/**
+ * 把单个会话文件转换到目标压缩格式（就地替换 + 删除原文件）。
+ * - 到 zstd：按 dsh 分帧格式编码 —— 第一帧=header 行，第二帧=其余事件（多帧拼接，均可独立解码）。
+ * - 到 plain：流式解压拼接为纯文本（兼容 dsh 分帧 / 单帧 / 帧头未知 content size 的原生文件）。
+ */
 export async function convertSessionFile(filePath: string, target: SessionCompression): Promise<void> {
   const name = path.basename(filePath)
   const dir = path.dirname(filePath)
@@ -301,13 +314,44 @@ export async function convertSessionFile(filePath: string, target: SessionCompre
   const data = fs.readFileSync(filePath)
   let converted: Buffer
   if (wantZstd) {
-    converted = await zstdCompressAsync(data)
+    // 源是明文：按 dsh 格式分帧编码
+    converted = await encodePlainToDshZstd(data)
   } else {
-    converted = await zstdDecompressAsync(data)
+    // 源是 zstd：流式解压（不依赖手动帧边界解析）
+    converted = await zstdDecompressStreamAsync(data)
   }
   const destName = wantZstd ? 'session.jsonl.zstd' : 'session.jsonl'
   fs.writeFileSync(path.join(dir, destName), converted)
   fs.rmSync(filePath, { force: true })
+}
+
+/** 流式解压 zstd（兼容单帧 / 多帧 / dsh 原生帧头）。 */
+async function zstdDecompressStreamAsync(data: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const stream = createZstdDecompress()
+    const chunks: Buffer[] = []
+    stream.on('data', (c: Buffer) => chunks.push(c))
+    stream.on('error', reject)
+    stream.on('end', () => resolve(Buffer.concat(chunks)))
+    stream.write(data)
+    stream.end()
+  })
+}
+
+/** 明文 → dsh zstd 分帧（header 帧 + 事件帧）。 */
+async function encodePlainToDshZstd(plain: Buffer): Promise<Buffer> {
+  const nl = plain.indexOf(10)
+  if (nl === -1) {
+    // 无换行：整段视为 header（dsh 也接受只有 header 的会话）
+    return zstdCompressFrameAsync(plain)
+  }
+  const headerLine = plain.subarray(0, nl + 1) // 含 \n
+  const rest = plain.subarray(nl + 1)
+  const headerFrame = await zstdCompressFrameAsync(headerLine)
+  if (rest.length === 0) return headerFrame
+  // 事件部分：与 dsh 写入一致按批压缩（这里整段一批即可，dsh 读取时只校验第一帧）
+  const eventFrame = await zstdCompressFrameAsync(rest)
+  return Buffer.concat([headerFrame, eventFrame])
 }
 
 /** 把会话目录内的 session 日志转换到目标压缩格式（兼容 session.jsonl / session.jsonl.zstd 两种命名）。 */
@@ -352,23 +396,27 @@ export async function repairSessionEncodings(workspaceDir: string): Promise<{ fi
 
 /**
  * 从外部路径导入会话：源可以是会话目录、单个会话文件或含会话的目录树（可多选混搭）。
- * 按 dsh 布局复制到 data/sessions/<来源名>/<会话id>/；id 冲突（全局）时重命名。
+ * 目标目录遵循 dsh 布局：data/sessions/<projectKey(cwd)>/<session-id>/。
+ * - projectKey：dsh 的 projectKey(cwd) = "--<sanitized>--"（路径分隔符→"-"，字符安全化）。
+ * - 会话目录名必须是会话 id（来自日志 header，而不是来源目录名），否则 dsh 报
+ *   "corrupt session log ... header id and cwd identify ..."。
+ * - id 冲突：同 id 已存在（任何 cwd 组）时跳过（不重复导入），返回 skipped 计数。
  * - 目录：会话目录直接导入；普通目录递归收集其中的会话目录 + 树内游离的会话文件。
  * - 文件：session.jsonl[.zstd] 视为单个会话文件——其父目录是会话目录时导入父目录；
- *   否则（独立导出的文件）以文件本身创建一个会话目录。
- * - targetWorkspacePath：指定导入到哪个工作区（来源名 = 该路径转义）；为空时用源路径父目录名。
- * - archiveRoots：压缩包解压根目录集合——这些目录一律按「树」处理（不做单会话目录判定），
- *   避免含多个会话的压缩包被误认为单个会话目录。
+ *   否则（独立导出的文件）以文件本身创建一个会话目录（id 取日志 header）。
+ * - targetWorkspacePath：指定导入到哪个工作区（仅当日志无 header/cwd 时用作回退组）。
+ * - archiveRoots：压缩包解压根目录集合——这些目录一律按「树」处理（不做单会话目录判定）。
  */
 export async function importSessionsFrom(
   workspaceDir: string,
   sourcePaths: string[],
   targetWorkspacePath?: string,
   archiveRoots?: Set<string>
-): Promise<{ ok: boolean; count: number; error?: string }> {
+): Promise<{ ok: boolean; count: number; skipped?: number; error?: string }> {
   const sessionsRoot = path.join(workspaceDir, 'data', 'sessions')
   fs.mkdirSync(sessionsRoot, { recursive: true })
   let imported = 0
+  let skipped = 0
   try {
     // 收集需要导入的「会话目录」（去重：同一来源目录只导入一次）
     const seen = new Set<string>()
@@ -384,8 +432,8 @@ export async function importSessionsFrom(
         isSessionFile &&
         (!isSessionDir(path.dirname(src)) || dirHasOnly(path.dirname(src), path.basename(src)))
       ) {
-        // 独立会话文件：以文件名（去掉扩展名）为会话 id，文件本身作为会话日志
-        const fileId = path.basename(src).replace(SESSION_FILE_RE, '') || 'session'
+        // 独立会话文件：以日志 header 的 id 为会话 id（无 header 时回退文件名）
+        const fileId = readSessionHeaderId(path.join(src)) ?? (path.basename(src).replace(SESSION_FILE_RE, '') || 'session')
         toImport.push({ srcDir: path.dirname(src), id: fileId, standaloneFile: path.basename(src) })
         continue
       }
@@ -404,7 +452,10 @@ export async function importSessionsFrom(
         const canonical = fs.realpathSync(dir)
         if (seen.has(canonical)) continue
         seen.add(canonical)
-        toImport.push({ srcDir: dir, id: path.basename(dir) })
+        // 会话目录：id 取自日志 header（目录名可能是 session / session-xxx / 任意名）
+        const logFile = findSessionLogFile(dir)
+        const headerId = logFile ? readSessionHeaderId(logFile) : null
+        toImport.push({ srcDir: dir, id: headerId ?? path.basename(dir) })
       }
     }
 
@@ -412,18 +463,31 @@ export async function importSessionsFrom(
     const targetCompression = getDshSessionCompression(workspaceDir)
 
     for (const { srcDir: dir, id, standaloneFile } of toImport) {
-      // 来源名：目标工作区路径转义（指定时），否则源路径父目录名
-      const sourceName = targetWorkspacePath
-        ? targetWorkspacePath.replace(/[\\/:*?"<>|]/g, '-')
-        : (path.basename(path.dirname(dir)) || 'imported').replace(/[\\/:*?"<>|]/g, '_') || 'imported'
+      // 读取会话日志的 header（cwd 决定归属哪个 project 组；id 校验一致性）
+      const logFile = standaloneFile ? path.join(dir, standaloneFile) : findSessionLogFile(dir)
+      const header = logFile ? await readSessionHeader(logFile) : null
+
       let destId = id
-      let destDir = path.join(sessionsRoot, sourceName, destId)
-      let suffix = 1
-      while (sessionIdExists(sessionsRoot, destId)) {
-        destId = `${id}-imported-${suffix}`
-        destDir = path.join(sessionsRoot, sourceName, destId)
-        suffix += 1
+      if (header?.id && header.id !== id) {
+        // header id 与目录推断不一致时以 header 为准（dsh 以 header 为准校验路径）
+        destId = header.id
       }
+      if (!destId || destId === 'session') {
+        destId = header?.id ?? 'session'
+      }
+
+      // 同 id 已存在（任何组）→ 跳过，避免 dsh 报 duplicate session id
+      if (sessionIdExists(sessionsRoot, destId)) {
+        skipped += 1
+        continue
+      }
+
+      // cwd 组：优先日志 header.cwd（保证 id/cwd/路径三方一致），否则回退 targetWorkspacePath
+      const groupCwd =
+        (header?.cwd && typeof header.cwd === 'string' && header.cwd.trim()) ||
+        targetWorkspacePath ||
+        'imported'
+      const destDir = path.join(sessionsRoot, dshProjectKey(groupCwd), destId)
       fs.mkdirSync(destDir, { recursive: true })
       const files = standaloneFile ? [standaloneFile] : fs.readdirSync(dir)
       for (const f of files) {
@@ -431,10 +495,126 @@ export async function importSessionsFrom(
       }
       // 压缩格式适配：目标目录里的会话日志必须与 dsh 配置一致，否则服务无法启动
       await convertSessionDirEncoding(destDir, targetCompression)
+      // 登记到工作区注册表：dsh 只在会话活跃/初始化时自动计入 sessionIds，
+      // 手动导入的会话必须显式写入 registry（dsh-storage-json 热重载感知），
+      // 否则侧边栏与 dsh 界面都看不到该会话。
+      registerImportedSession(workspaceDir, destId, groupCwd)
       imported += 1
     }
-    return { ok: true, count: imported }
+    return { ok: true, count: imported, skipped: skipped > 0 ? skipped : undefined }
   } catch (error) {
     return { ok: false, count: imported, error: `导入失败：${error instanceof Error ? error.message : String(error)}` }
   }
+}
+
+/** 把导入的会话登记到 workspace.json 注册表（对应 cwd 的 workspace 的 sessionIds）。 */
+function registerImportedSession(workspaceDir: string, sessionId: string, cwd: string): void {
+  try {
+    const registryPath = path.join(workspaceDir, 'data', 'storages', 'workspace.json')
+    const raw = readJsonFile(registryPath) as {
+      tables?: { workspaces?: Record<string, { path?: unknown; sessionIds?: unknown }> }
+    } | null
+    if (!raw?.tables?.workspaces) return
+    const canonical = path.resolve(cwd)
+    let changed = false
+    for (const ws of Object.values(raw.tables.workspaces)) {
+      if (typeof ws.path !== 'string' || path.resolve(ws.path) !== canonical) continue
+      const ids = Array.isArray(ws.sessionIds) ? (ws.sessionIds as unknown[]).filter((x): x is string => typeof x === 'string') : []
+      if (!ids.includes(sessionId)) {
+        ws.sessionIds = [sessionId, ...ids]
+        changed = true
+      }
+    }
+    if (changed) writeJsonAtomic(registryPath, raw)
+  } catch (error) {
+    logger.warn(`登记导入会话到注册表失败：${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+/** 在会话目录中找到 session 日志文件（session.jsonl / session.jsonl.zstd）。 */
+function findSessionLogFile(sessionDir: string): string | null {
+  if (!fs.existsSync(sessionDir)) return null
+  for (const f of fs.readdirSync(sessionDir)) {
+    if (SESSION_FILE_RE.test(f)) return path.join(sessionDir, f)
+  }
+  return null
+}
+
+/** 读取会话日志 header（首行 JSON），无法解析返回 null。 */
+async function readSessionHeader(logFile: string): Promise<{ id?: string; cwd?: string } | null> {
+  try {
+    const firstLine = await readFirstLineAnyEncoding(logFile)
+    if (!firstLine) return null
+    const parsed = JSON.parse(firstLine) as { id?: unknown; cwd?: unknown }
+    if (typeof parsed.id !== 'string') return null
+    return { id: parsed.id, cwd: typeof parsed.cwd === 'string' ? parsed.cwd : undefined }
+  } catch {
+    return null
+  }
+}
+
+/** 读取会话日志 header 的 id（同步版，供收集阶段使用）。 */
+function readSessionHeaderId(logFile: string): string | null {
+  try {
+    const firstLine = readFirstLineAnyEncodingSync(logFile)
+    if (!firstLine) return null
+    const parsed = JSON.parse(firstLine) as { id?: unknown }
+    return typeof parsed.id === 'string' ? parsed.id : null
+  } catch {
+    return null
+  }
+}
+
+/** 读取文件第一行（兼容明文与 zstd 分帧/单帧）。 */
+function readFirstLineAnyEncodingSync(filePath: string): string | null {
+  try {
+    const data = fs.readFileSync(filePath)
+    // zstd magic 0x28 0xB5 0x2F 0xFD
+    if (data.length >= 4 && data[0] === 0x28 && data[1] === 0xb5 && data[2] === 0x2f && data[3] === 0xfd) {
+      return null // zstd 需异步解码，见 readSessionHeader
+    }
+    const nl = data.indexOf(10)
+    return (nl === -1 ? data : data.subarray(0, nl)).toString('utf8')
+  } catch {
+    return null
+  }
+}
+
+/** 异步读取 zstd/明文文件第一行（用于解析 header）。 */
+async function readFirstLineAnyEncoding(filePath: string): Promise<string | null> {
+  const data = fs.readFileSync(filePath)
+  if (data.length >= 4 && data[0] === 0x28 && data[1] === 0xb5 && data[2] === 0x2f && data[3] === 0xfd) {
+    // zstd：流式解压后取第一行
+    const plain = await zstdDecompressStreamAsync(data)
+    const nl = plain.indexOf(10)
+    return (nl === -1 ? plain : plain.subarray(0, nl)).toString('utf8')
+  }
+  const nl = data.indexOf(10)
+  return (nl === -1 ? data : data.subarray(0, nl)).toString('utf8')
+}
+
+/**
+ * dsh 的 projectKey(cwd) 规则（源码核实）：分隔符 / \ : → "-"；不安全字符 → ~XXXX；
+ * 结果用 "--" 前后包裹（如 F:\deepseek_workspace → --F--deepseek_workspace--）。
+ * 会话必须放在该组目录下，否则 dsh 的 assertStoredIdentity 报 corrupt。
+ */
+export function dshProjectKey(cwd: string): string {
+  if (!cwd || cwd.length === 0) return '--imported--'
+  let readable = ''
+  let separatorRun = false
+  for (let i = 0; i < cwd.length; i++) {
+    const code = cwd.charCodeAt(i)
+    const ch = cwd[i]
+    if (ch === '/' || ch === '\\' || ch === ':') {
+      if (!separatorRun) readable += '-'
+      separatorRun = true
+    } else if (ch !== '~' && /^[A-Za-z0-9._-]$/.test(ch)) {
+      readable += ch
+      separatorRun = false
+    } else {
+      readable += '~' + code.toString(16).toUpperCase().padStart(4, '0')
+      separatorRun = false
+    }
+  }
+  return `--${(readable.replace(/^-+/, '') || 'root').slice(0, 251)}--`
 }

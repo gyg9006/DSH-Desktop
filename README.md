@@ -34,6 +34,12 @@
 | ![主界面](screenshots/main.png) | ![插件与技能](screenshots/plugins-skills.png) |
 | **已安装（插件 + 技能一目了然）** | **关于（版本与更新）** |
 | ![已安装](screenshots/plugins-installed.png) | ![关于](screenshots/about.png) |
+| **环境检测（一键安装缺失项）** | **服务与运行（端口 / 自启 / 托盘）** |
+| ![环境检测](screenshots/settings-env.png) | ![服务与运行](screenshots/settings-service.png) |
+| **工作文件夹（拷贝即迁移）** | **备份与恢复（自动备份）** |
+| ![工作文件夹](screenshots/settings-workspace.png) | ![备份与恢复](screenshots/settings-backup.png) |
+| **异地同步（A/B 电脑）** | |
+| ![异地同步](screenshots/settings-sync.png) | |
 
 ---
 

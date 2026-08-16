@@ -17,6 +17,7 @@ import {
   Key,
   DataAnalysis,
   Document,
+  InfoFilled,
   RefreshLeft,
   VideoPlay,
   Grid,
@@ -664,10 +665,11 @@ const SETTING_ITEMS = [
   { key: 'workspace', name: '工作文件夹', desc: '路径 / 迁移 / 数据目录', icon: FolderOpened },
   { key: 'service', name: '服务与运行', desc: '端口 / 启动参数 / 开机自启', icon: Connection },
   { key: 'api', name: '模型与 API', desc: 'API Key / 模型 / 提供方', icon: Key },
-  { key: 'plugins', name: '插件', desc: '功能插件 / 在线插件市场 / 推荐技能', icon: Grid },
+  { key: 'plugins', name: '插件', desc: '功能插件 / 推荐技能 / 已安装', icon: Grid },
   { key: 'backup', name: '备份与恢复', desc: '一键备份 / 自动备份 / 导出', icon: DataAnalysis },
   { key: 'sync', name: '异地同步', desc: 'A/B 电脑之间同步会话', icon: RefreshLeft },
-  { key: 'about', name: '日志与关于', desc: '日志 / 版本 / 初始化', icon: Document }
+  { key: 'logs', name: '日志与初始化', desc: '日志查看 / 出厂重置', icon: Document },
+  { key: 'about', name: '关于', desc: '版本 / 更新方式', icon: InfoFilled }
 ]
 </script>
 

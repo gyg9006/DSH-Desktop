@@ -112,6 +112,91 @@ export function skillMarketItems(workspaceDir: string): SkillMarketItem[] {
   }))
 }
 
+/**
+ * 联网搜索技能：从 npmmirror 检索「技能类」npm 包（按名字 / 功能词 / skill 关键词）。
+ * 结果可直接用 installSkillFromNpmCollection 按包安装（包内含 SKILL.md 目录的技能）。
+ */
+export async function searchNpmSkills(
+  query: string
+): Promise<{ ok: boolean; hits: Array<{ name: string; description: string; keywords: string[] }>; error?: string }> {
+  const raw = query.trim()
+  if (!raw) return { ok: true, hits: [] }
+  // 包名精确查询（用户输入完整包名时直查元数据）
+  if (/^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(raw) && !/[\u4e00-\u9fff]/.test(raw)) {
+    try {
+      const meta = await fetch(`https://registry.npmmirror.com/${encodeURIComponent(raw)}`)
+      if (meta.ok) {
+        const pkg = (await meta.json()) as { name?: unknown; description?: unknown; keywords?: unknown; 'dist-tags'?: { latest?: unknown } }
+        if (typeof pkg.name === 'string') {
+          return {
+            ok: true,
+            hits: [
+              {
+                name: pkg.name,
+                description: typeof pkg.description === 'string' ? pkg.description : '',
+                keywords: Array.isArray(pkg.keywords) ? pkg.keywords.map((k) => String(k)) : []
+              }
+            ]
+          }
+        }
+      }
+    } catch {
+      /* 直查失败 → 全文搜索 */
+    }
+  }
+  // 全文搜索：把中文功能词与「skill」/「skills」关键词组合检索
+  const searchText = raw.includes('skill') || /[\u4e00-\u9fff]/.test(raw) ? raw : `${raw} skill`
+  const url = `https://registry.npmmirror.com/-/v1/search?text=${encodeURIComponent(searchText)}&size=30`
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
+    if (!res.ok) return { ok: false, hits: [], error: `搜索服务返回 HTTP ${res.status}` }
+    const body = (await res.json()) as { objects?: Array<{ package?: { name?: unknown; description?: unknown; keywords?: unknown } }> }
+    let hits: Array<{ name: string; description: string; keywords: string[] }> = []
+    for (const obj of Array.isArray(body?.objects) ? body.objects : []) {
+      const p = obj?.package
+      if (!p || typeof p !== 'object') continue
+      const name = typeof p.name === 'string' ? p.name : ''
+      if (!name) continue
+      const kw = Array.isArray(p.keywords) ? p.keywords.map((k) => String(k)) : []
+      hits.push({
+        name,
+        description: typeof p.description === 'string' ? p.description : '',
+        keywords: kw
+      })
+    }
+    // 中文功能词：只保留名字/描述/关键词含该词的条目
+    const hasCjk = /[\u4e00-\u9fff]/.test(raw)
+    if (hasCjk) {
+      hits = hits.filter((h) => {
+        const hay = `${h.name} ${h.description} ${h.keywords.join(' ')}`.toLowerCase()
+        return raw.toLowerCase().split(/\s+/).some((t) => hay.includes(t))
+      })
+    }
+    // 优先「技能类」包（名字/关键词含 skill）
+    hits.sort((a, b) => {
+      const score = (h: { name: string; keywords: string[] }): number =>
+        (h.name.toLowerCase().includes('skill') ? 2 : 0) + (h.keywords.some((k) => /skill/i.test(k)) ? 1 : 0)
+      return score(b) - score(a)
+    })
+    return { ok: true, hits }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      return { ok: false, hits: [], error: '搜索超时（15 秒）' }
+    }
+    return { ok: false, hits: [], error: `搜索失败：${reason}` }
+  }
+}
+
+/** 按包名从 npm 安装技能（包内所有含 SKILL.md 的技能目录都会安装到 workspace/skills）。 */
+export async function installSkillFromNpmPackage(
+  workspaceDir: string,
+  pkg: string,
+  log: (msg: string) => void
+): Promise<{ ok: boolean; error?: string; installed: string[] }> {
+  return installSkillsFromNpm(workspaceDir, pkg, log)
+}
+
 /** 已安装技能（workspace/skills 下含 SKILL.md 的目录）。 */
 export function listInstalledSkills(workspaceDir: string): InstalledSkillInfo[] {
   const root = path.join(workspaceDir, 'skills')

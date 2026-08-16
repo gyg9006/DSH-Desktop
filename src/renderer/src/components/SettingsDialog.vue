@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Monitor, FolderOpened, Connection, Key, DataAnalysis, Document, RefreshLeft, Grid, Setting } from '@element-plus/icons-vue'
+import { Monitor, FolderOpened, Connection, Key, DataAnalysis, Document, RefreshLeft, Grid, Setting, InfoFilled } from '@element-plus/icons-vue'
 import { useUiStore } from '../stores/ui'
 import EnvTab from './settings/tabs/EnvTab.vue'
 import WorkspaceTab from './settings/tabs/WorkspaceTab.vue'
@@ -8,6 +8,7 @@ import ServiceTab from './settings/tabs/ServiceTab.vue'
 import ApiTab from './settings/tabs/ApiTab.vue'
 import BackupTab from './settings/tabs/BackupTab.vue'
 import AboutTab from './settings/tabs/AboutTab.vue'
+import LogTab from './settings/tabs/LogTab.vue'
 import SyncTab from './settings/tabs/SyncTab.vue'
 import PluginTab from './settings/tabs/PluginTab.vue'
 import GeneralTab from './settings/tabs/GeneralTab.vue'
@@ -33,7 +34,8 @@ const tabs: TabDef[] = [
   { key: 'plugins', name: '插件', icon: Grid, component: PluginTab },
   { key: 'backup', name: '备份与恢复', icon: DataAnalysis, component: BackupTab },
   { key: 'sync', name: '异地同步', icon: RefreshLeft, component: SyncTab },
-  { key: 'about', name: '日志与关于', icon: Document, component: AboutTab }
+  { key: 'logs', name: '日志与初始化', icon: Document, component: LogTab },
+  { key: 'about', name: '关于', icon: InfoFilled, component: AboutTab }
 ]
 
 const activeTab = computed(() => tabs.find((t) => t.key === ui.settingsTab) ?? tabs[0])

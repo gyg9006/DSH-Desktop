@@ -204,8 +204,12 @@ const api = {
   // ---------- 推荐技能市场 ----------
   getSkills: (): Promise<{ items: SkillMarketItem[]; installed: InstalledSkillInfo[] }> =>
     ipcRenderer.invoke(IPC.SkillsList),
+  searchSkills: (query: string): Promise<{ ok: boolean; hits: Array<{ name: string; description: string; keywords: string[] }>; error?: string }> =>
+    ipcRenderer.invoke(IPC.SkillsSearch, query),
   installSkill: (skillId: string): Promise<{ ok: boolean; error?: string; installed?: string[]; log?: string }> =>
     ipcRenderer.invoke(IPC.SkillInstall, skillId),
+  installSkillNpm: (pkg: string): Promise<{ ok: boolean; error?: string; installed?: string[]; log?: string }> =>
+    ipcRenderer.invoke(IPC.SkillInstallNpm, pkg),
 
   // ---------- 通用设置（同步 dsh） ----------
   getDshUiSettings: (): Promise<DshUiSettingsResult> => ipcRenderer.invoke(IPC.DshUiGet),

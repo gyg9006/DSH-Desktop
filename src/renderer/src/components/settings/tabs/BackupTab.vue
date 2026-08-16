@@ -147,7 +147,7 @@ async function restoreFromFile(): Promise<void> {
     const result = await window.dshw.restoreBackup(picked.path)
     if (result.ok) {
       ElMessage.success('备份已恢复')
-      ElMessageBox.alert('恢复完成。为避免旧数据残留，建议重启应用（设置 → 日志与关于 → 重启）后再继续使用。', '恢复完成', {
+      ElMessageBox.alert('恢复完成。为避免旧数据残留，建议重启应用后再继续使用。', '恢复完成', {
         confirmButtonText: '知道了'
       }).catch(() => undefined)
     } else {

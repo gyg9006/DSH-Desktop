@@ -1,18 +1,21 @@
 <script setup lang="ts">
 /**
- * 插件 Tab：功能插件（内置、离线启用）+ 在线市场（npmmirror 搜索、中文关键词映射）
- * + 推荐技能（知名开源技能库，绿色「推荐」标签）+ 已安装清单。
+ * 插件 Tab：功能插件（内置 + 联网搜索）+ 推荐技能（精选 + 联网搜索）+ 已安装（插件 + 技能）。
+ * - 功能插件：内置的 dsh 功能插件（离线启用）+ 在线搜索 npmmirror 插件（按名字/功能词）安装。
+ * - 推荐技能：50 个精选开源技能 + 联网搜索技能包（按名字/功能词）安装到 workspace/skills。
+ * - 已安装：列出通过 npm 安装的插件 与 已安装的技能。
  * 启用/安装写入 $DSH_HOME/cordis.patch.yml 用户层补丁与 profile 的 pnpm dependencies，
  * 技能安装到 workspace/skills/（dsh-skill-filesystem 扫描）。
  */
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, RefreshRight, Download, Delete, CircleCheckFilled, CircleCloseFilled } from '@element-plus/icons-vue'
+import { Search, RefreshRight, Download, Delete, CircleCheckFilled } from '@element-plus/icons-vue'
 import type { InstalledPluginPayload, InstalledSkillInfo, NpmPluginHitPayload, PluginStatePayload, SkillMarketItem } from '@shared/ipc'
 import { useServiceStore } from '../../../stores/service'
 
 const service = useServiceStore()
 
+// 功能插件
 const curated = ref<PluginStatePayload[]>([])
 const installed = ref<InstalledPluginPayload[]>([])
 const loaded = ref(false)
@@ -30,12 +33,19 @@ const skillPage = ref(1)
 const pagedPlugins = computed(() => curated.value.slice((pluginPage.value - 1) * PAGE_SIZE, pluginPage.value * PAGE_SIZE))
 const pagedSkills = computed(() => skills.value.slice((skillPage.value - 1) * PAGE_SIZE, skillPage.value * PAGE_SIZE))
 
-// 市场搜索
+// 功能插件：联网搜索（替代原「在线插件市场」）
 const query = ref('')
 const searching = ref(false)
 const searchError = ref('')
 const hits = ref<NpmPluginHitPayload[]>([])
 const searched = ref(false)
+
+// 推荐技能：联网搜索
+const skillQuery = ref('')
+const skillSearching = ref(false)
+const skillSearchError = ref('')
+const skillHits = ref<Array<{ name: string; description: string; keywords: string[] }>>([])
+const skillSearched = ref(false)
 
 // 安装/卸载日志
 const opLog = ref('')
@@ -91,6 +101,7 @@ async function togglePlugin(p: PluginStatePayload): Promise<void> {
   }
 }
 
+/** 功能插件联网搜索（npmmirror，按名字/功能词）。 */
 async function doSearch(): Promise<void> {
   if (!query.value.trim()) return
   searching.value = true
@@ -107,6 +118,26 @@ async function doSearch(): Promise<void> {
     }
   } finally {
     searching.value = false
+  }
+}
+
+/** 推荐技能联网搜索（npmmirror 技能包，按名字/功能词）。 */
+async function doSkillSearch(): Promise<void> {
+  if (!skillQuery.value.trim()) return
+  skillSearching.value = true
+  skillSearchError.value = ''
+  skillSearched.value = true
+  try {
+    const result = await window.dshw.searchSkills(skillQuery.value)
+    if (result.ok) {
+      skillHits.value = result.hits
+      if (result.hits.length === 0) skillSearchError.value = '没有找到匹配的技能，试试「pdf」「word」「代码审查」等关键词'
+    } else {
+      skillSearchError.value = result.error ?? '搜索失败'
+      skillHits.value = []
+    }
+  } finally {
+    skillSearching.value = false
   }
 }
 
@@ -144,6 +175,33 @@ async function doInstall(pkg: NpmPluginHitPayload): Promise<void> {
   }
 }
 
+/** 安装搜索到的技能包（包内所有含 SKILL.md 的技能都会装进 workspace/skills）。 */
+async function doInstallSkillNpm(name: string): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `从 npm 安装技能包 ${name}？\n包内所有含 SKILL.md 的技能目录都会安装到 workspace/skills（联网）。`,
+      '安装技能',
+      { type: 'info', confirmButtonText: '安装', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  skillBusy.value = name
+  opLog.value = ''
+  try {
+    const result = await window.dshw.installSkillNpm(name)
+    if (result.log) opLog.value = result.log
+    if (result.ok) {
+      ElMessage.success(`技能已安装：${(result.installed ?? []).join('、') || name}（重启 dsh 服务后生效）`)
+      await refreshSkills()
+    } else {
+      ElMessage.error(result.error ?? '安装失败')
+    }
+  } finally {
+    skillBusy.value = null
+  }
+}
+
 async function doUninstall(pkg: InstalledPluginPayload): Promise<void> {
   try {
     await ElMessageBox.confirm(`卸载 ${pkg.name}？会从 profile 移除该依赖（重启 dsh 服务后生效）。`, '卸载插件', {
@@ -177,7 +235,7 @@ async function doInstallSkill(s: SkillMarketItem): Promise<void> {
     const result = await window.dshw.installSkill(s.id)
     if (result.log) opLog.value = result.log
     if (result.ok) {
-      ElMessage.success(`已安装技能：${(result.installed ?? []).join('、')}`)
+      ElMessage.success(`技能已安装：${(result.installed ?? []).join('、') || s.name}（重启 dsh 服务后生效）`)
       await refreshSkills()
     } else {
       ElMessage.error(result.error ?? '安装失败')
@@ -208,9 +266,9 @@ function fmtDate(d: string): string {
   <div>
     <h3 class="text-base font-semibold text-gray-800 dark:text-gray-100">插件与技能</h3>
     <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-      <strong class="text-gray-600 dark:text-gray-300">插件</strong>（功能插件 / 在线市场）与<strong class="text-gray-600 dark:text-gray-300">技能</strong>（推荐技能）是两类不同的东西：
+      <strong class="text-gray-600 dark:text-gray-300">插件</strong>（功能插件）与<strong class="text-gray-600 dark:text-gray-300">技能</strong>（推荐技能）是两类不同的东西：
       插件是扩展 dsh 自身功能的 npm 包（工具、命令等），装进 dsh profile；技能是对话中可直接调用的技能目录（SKILL.md），装进 workspace/skills。
-      <strong class="text-gray-600 dark:text-gray-300">在线市场安装的是插件，不是技能</strong>；如需技能请到「推荐技能」页安装。
+      两个模块都支持<strong class="text-gray-600 dark:text-gray-300">联网搜索</strong>（按名字 / 功能词）并直接安装。
       启用/安装后需<strong class="text-gray-600 dark:text-gray-300">重启 dsh 服务</strong>生效。
     </p>
 
@@ -228,8 +286,62 @@ function fmtDate(d: string): string {
     </div>
 
     <el-tabs v-if="loaded" class="mt-2 plugin-tabs" type="border-card">
-      <!-- 功能插件 -->
+      <!-- 功能插件（内置 + 联网搜索） -->
       <el-tab-pane label="功能插件">
+        <!-- 联网搜索（替代原在线插件市场） -->
+        <div class="mb-3 flex items-center gap-2">
+          <el-input
+            v-model="query"
+            size="small"
+            placeholder="联网搜索插件：按名字或功能词（如「搜索」「数据库」「mcp」）"
+            clearable
+            @keyup.enter="doSearch()"
+          />
+          <el-button size="small" type="primary" :icon="Search" :loading="searching" @click="doSearch()">搜索</el-button>
+        </div>
+        <p v-if="searchError" class="mb-2 text-xs text-gray-500 dark:text-gray-400">{{ searchError }}</p>
+
+        <!-- 搜索结果（联网插件） -->
+        <div v-if="searched && hits.length > 0" class="mb-3 space-y-2">
+          <div class="text-[11px] font-medium text-gray-400 dark:text-gray-500">联网搜索结果（{{ hits.length }}）</div>
+          <div
+            v-for="hit in hits"
+            :key="hit.name"
+            class="flex items-start justify-between gap-3 rounded-lg border border-gray-100 p-3 dark:border-[#23262C]"
+          >
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-mono text-xs font-semibold text-gray-800 dark:text-gray-100">{{ hit.name }}</span>
+                <span class="text-[11px] text-gray-400 dark:text-gray-500">v{{ hit.version }}</span>
+                <span v-if="hit.name.includes('@deepseek-ai')" class="status-chip source-chip">dsh 官方</span>
+                <span v-if="isInstalled(hit.name)" class="status-chip">已安装</span>
+              </div>
+              <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                {{ hit.description || '（无描述）' }}
+              </p>
+              <p class="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
+                {{ [hit.author, hit.date ? fmtDate(hit.date) : ''].filter(Boolean).join(' · ') }}
+              </p>
+            </div>
+            <div class="shrink-0">
+              <el-button
+                v-if="!isInstalled(hit.name)"
+                size="small"
+                type="primary"
+                plain
+                :icon="Download"
+                :loading="installing === hit.name"
+                @click="doInstall(hit)"
+              >
+                安装
+              </el-button>
+              <span v-else class="text-[11px] text-gray-400 dark:text-gray-500">已安装</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 内置推荐插件 -->
+        <div class="mb-1 text-[11px] font-medium text-gray-400 dark:text-gray-500">内置推荐插件（{{ curated.length }}）</div>
         <div class="space-y-3">
           <div v-for="p in pagedPlugins" :key="p.name" class="rounded-lg border border-gray-100 p-3 dark:border-[#23262C]">
             <div class="flex items-start justify-between gap-3">
@@ -268,66 +380,60 @@ function fmtDate(d: string): string {
         </div>
       </el-tab-pane>
 
-      <!-- 在线插件市场（注意：装的是插件，不是技能） -->
-      <el-tab-pane label="在线插件市场">
-        <div class="flex items-center gap-2">
+      <!-- 推荐技能（精选 + 联网搜索） -->
+      <el-tab-pane label="推荐技能">
+        <!-- 联网搜索 -->
+        <div class="mb-3 flex items-center gap-2">
           <el-input
-            v-model="query"
+            v-model="skillQuery"
             size="small"
-            placeholder="搜索插件（非技能）：支持中文功能词（如「搜索」「数据库」「mcp」）或插件名"
+            placeholder="联网搜索技能：按名字或功能词（如「pdf」「word」「代码审查」「文档」）"
             clearable
-            @keyup.enter="doSearch()"
+            @keyup.enter="doSkillSearch()"
           />
-          <el-button size="small" type="primary" :icon="Search" :loading="searching" @click="doSearch()">搜索</el-button>
+          <el-button size="small" type="success" plain :icon="Search" :loading="skillSearching" @click="doSkillSearch()">搜索</el-button>
         </div>
-        <p class="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-          这里搜索并安装的是 <strong>dsh 插件</strong>（npm cordis 插件，扩展 dsh 自身功能）。插件不是技能——安装后请到「推荐技能」页安装对话技能；在对话中调用技能请用技能名。
-        </p>
-        <p v-if="searchError" class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ searchError }}</p>
+        <p v-if="skillSearchError" class="mb-2 text-xs text-gray-500 dark:text-gray-400">{{ skillSearchError }}</p>
 
-        <div v-if="searched && hits.length > 0" class="mt-3 space-y-2">
+        <!-- 技能搜索结果 -->
+        <div v-if="skillSearched && skillHits.length > 0" class="mb-3 space-y-2">
+          <div class="text-[11px] font-medium text-gray-400 dark:text-gray-500">联网搜索结果（{{ skillHits.length }}）</div>
           <div
-            v-for="hit in hits"
+            v-for="hit in skillHits"
             :key="hit.name"
             class="flex items-start justify-between gap-3 rounded-lg border border-gray-100 p-3 dark:border-[#23262C]"
           >
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="font-mono text-xs font-semibold text-gray-800 dark:text-gray-100">{{ hit.name }}</span>
-                <span class="text-[11px] text-gray-400 dark:text-gray-500">v{{ hit.version }}</span>
-                <span v-if="hit.name.includes('@deepseek-ai')" class="status-chip source-chip">dsh 官方</span>
-                <span v-if="isInstalled(hit.name)" class="status-chip">已安装</span>
+                <span class="status-chip source-chip">npm 技能包</span>
               </div>
               <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                 {{ hit.description || '（无描述）' }}
               </p>
-              <p class="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
-                {{ [hit.author, hit.date ? fmtDate(hit.date) : ''].filter(Boolean).join(' · ') }}
-              </p>
+              <div v-if="hit.keywords.length" class="mt-1 flex flex-wrap gap-1">
+                <span v-for="k in hit.keywords.slice(0, 6)" :key="k" class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-400 dark:bg-[#1E2126] dark:text-gray-500">
+                  {{ k }}
+                </span>
+              </div>
             </div>
             <div class="shrink-0">
               <el-button
-                v-if="!isInstalled(hit.name)"
                 size="small"
-                type="primary"
+                type="success"
                 plain
                 :icon="Download"
-                :loading="installing === hit.name"
-                @click="doInstall(hit)"
+                :loading="skillBusy === hit.name"
+                @click="doInstallSkillNpm(hit.name)"
               >
                 安装
               </el-button>
-              <span v-else class="text-[11px] text-gray-400 dark:text-gray-500">已安装</span>
             </div>
           </div>
         </div>
-        <p v-else-if="searched && hits.length === 0 && !searchError" class="mt-3 text-xs text-gray-400">
-          没有结果
-        </p>
-      </el-tab-pane>
 
-      <!-- 推荐技能 -->
-      <el-tab-pane label="推荐技能">
+        <!-- 精选技能 -->
+        <div class="mb-1 text-[11px] font-medium text-gray-400 dark:text-gray-500">精选推荐技能（{{ skills.length }}）</div>
         <div class="space-y-2">
           <div
             v-for="s in pagedSkills"
@@ -383,15 +489,16 @@ function fmtDate(d: string): string {
           />
         </div>
         <p class="mt-3 text-[11px] text-gray-400 dark:text-gray-500">
-          技能来自社区推崇的开源技能库（含 anthropics/skills 与 obra/superpowers 等），经 npmmirror 技能合集直装，无需 GitHub。
-          安装后技能出现在对话的技能列表中（workspace/skills）；这与「在线插件市场」安装的 dsh 插件（扩展 dsh 功能）不同。
+          精选技能来自社区推崇的开源技能库（含 anthropics/skills 与 obra/superpowers 等），经 npmmirror 技能合集直装，无需 GitHub。
+          联网搜索可安装任意 npm 技能包（包内含 SKILL.md 目录的技能）。
         </p>
       </el-tab-pane>
 
-      <!-- 已安装 -->
+      <!-- 已安装（插件 + 技能） -->
       <el-tab-pane label="已安装">
-        <div v-if="installed.length === 0" class="py-4 text-center text-xs text-gray-400 dark:text-gray-500">
-          还没有通过 npm 安装的插件（dsh 内置插件见「功能插件」页，技能见「推荐技能」页）
+        <div class="mb-1 text-[11px] font-medium text-gray-400 dark:text-gray-500">已安装插件（{{ installed.length }}）</div>
+        <div v-if="installed.length === 0" class="py-3 text-center text-xs text-gray-400 dark:text-gray-500">
+          还没有通过 npm 安装的插件（内置插件见「功能插件」页）
         </div>
         <div v-else class="space-y-2">
           <div
@@ -412,15 +519,17 @@ function fmtDate(d: string): string {
             </el-button>
           </div>
         </div>
-        <template v-if="skillInstalled.length > 0">
-          <div class="mb-1 mt-4 text-xs font-medium text-gray-600 dark:text-gray-300">已安装技能（workspace/skills）</div>
-          <div class="space-y-1">
-            <div v-for="s in skillInstalled" :key="s.id" class="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2 dark:border-[#23262C]">
-              <span class="font-mono text-xs text-gray-700 dark:text-gray-200">{{ s.id }}</span>
-              <span class="text-[11px] text-gray-400">{{ (s.sizeBytes / 1024).toFixed(1) }} KB</span>
-            </div>
+
+        <div class="mb-1 mt-5 text-[11px] font-medium text-gray-400 dark:text-gray-500">已安装技能（{{ skillInstalled.length }}，workspace/skills）</div>
+        <div v-if="skillInstalled.length === 0" class="py-3 text-center text-xs text-gray-400 dark:text-gray-500">
+          还没有安装技能（见「推荐技能」页）
+        </div>
+        <div v-else class="space-y-1">
+          <div v-for="s in skillInstalled" :key="s.id" class="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2 dark:border-[#23262C]">
+            <span class="font-mono text-xs text-gray-700 dark:text-gray-200">{{ s.id }}</span>
+            <span class="text-[11px] text-gray-400">{{ (s.sizeBytes / 1024).toFixed(1) }} KB</span>
           </div>
-        </template>
+        </div>
       </el-tab-pane>
     </el-tabs>
 

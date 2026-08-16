@@ -47,7 +47,7 @@ import {
   uninstallPlugin,
   isValidPkgSpec
 } from './plugins'
-import { skillMarketItems, installSkill, listInstalledSkills, CURATED_SKILLS } from './skillsMarket'
+import { skillMarketItems, installSkill, listInstalledSkills, CURATED_SKILLS, searchNpmSkills, installSkillFromNpmPackage } from './skillsMarket'
 import { readUiSettings, writeUiSettings } from './dshUi'
 import { readWorkspaces, renameWorkspace, deleteWorkspace, readSidebarData } from './workspaces'
 import {
@@ -464,12 +464,29 @@ export function registerIpcHandlers(): void {
     return { items: skillMarketItems(getWorkspaceDir()), installed: listInstalledSkills(getWorkspaceDir()) }
   })
 
+  // 联网搜索技能（npmmirror，按名字 / 功能词）
+  ipcMain.handle(IPC.SkillsSearch, async (_event, query: string) => {
+    return searchNpmSkills(String(query ?? ''))
+  })
+
   ipcMain.handle(IPC.SkillInstall, async (_event, skillId: string) => {
     const id = String(skillId ?? '').trim()
     const skill = CURATED_SKILLS.find((s) => s.id === id)
     if (!skill) return { ok: false, error: `未知技能：${id}` }
     const lines: string[] = []
     const result = await installSkill(getWorkspaceDir(), skill, (msg) => {
+      const t = msg.trim()
+      if (t && lines.length < 80) lines.push(t)
+    })
+    return { ok: result.ok, error: result.error, installed: result.installed, log: lines.join('\n') }
+  })
+
+  // 按 npm 包名安装技能（搜索结果中的技能包）
+  ipcMain.handle(IPC.SkillInstallNpm, async (_event, pkg: string) => {
+    const name = String(pkg ?? '').trim()
+    if (!name) return { ok: false, error: '包名不能为空' }
+    const lines: string[] = []
+    const result = await installSkillFromNpmPackage(getWorkspaceDir(), name, (msg) => {
       const t = msg.trim()
       if (t && lines.length < 80) lines.push(t)
     })

@@ -37,7 +37,8 @@ export function getBackupsDir(workspaceDir: string): string {
   return path.join(workspaceDir, 'backups')
 }
 
-/** 一键备份：打包业务数据为带时间戳 zip（规格 6.21）。 */
+/** 一键备份：打包业务数据为带时间戳 zip（规格 6.21）。
+ * 排除 config/electron-userdata（Electron 会话缓存，应用自身常驻占用，非业务数据）。 */
 export async function createBackup(
   workspaceDir: string,
   destDir?: string
@@ -45,21 +46,74 @@ export async function createBackup(
   const backupsDir = destDir ?? getBackupsDir(workspaceDir)
   fs.mkdirSync(backupsDir, { recursive: true })
   const zipPath = path.join(backupsDir, `backup-${backupTimestamp()}.zip`)
-  const result = await runCommand({
-    command: 'tar',
-    args: ['-a', '-cf', zipPath, '-C', workspaceDir, ...BACKUP_DIRS],
-    timeoutMs: ZIP_TIMEOUT_MS
-  })
-  if (result.error) {
-    logger.error(`备份失败：${result.error}`)
-    return { ok: false, error: `备份失败：${result.error}` }
+
+  // 先把业务数据暂存到临时目录（跳过 config/electron-userdata），再打包，
+  // 避免 tar 的 --exclude 在 Windows 不同 tar 实现下的兼容性问题，也避免运行时锁定。
+  const staging = path.join(workspaceDir, 'tmp', `backup-stage-${Date.now()}`)
+  fs.mkdirSync(staging, { recursive: true })
+  try {
+    for (const d of BACKUP_DIRS) {
+      const src = path.join(workspaceDir, d)
+      if (!fs.existsSync(src)) continue
+      const dest = path.join(staging, d)
+      if (d === 'config') {
+        // config 仅排除 electron-userdata（运行中锁定），其余照常复制
+        copyDirExcluding(src, dest, ['electron-userdata'])
+      } else {
+        fs.cpSync(src, dest, { recursive: true })
+      }
+    }
+    const result = await runCommand({
+      command: 'tar',
+      args: ['-a', '-cf', zipPath, '-C', staging, ...BACKUP_DIRS],
+      timeoutMs: ZIP_TIMEOUT_MS
+    })
+    if (result.error) {
+      logger.error(`备份失败：${result.error}`)
+      return { ok: false, error: `备份失败：${result.error}` }
+    }
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true })
   }
+
   if (!fs.existsSync(zipPath)) {
     return { ok: false, error: '备份失败：未生成备份文件' }
   }
   const sizeBytes = fs.statSync(zipPath).size
   logger.info(`备份完成：${zipPath}（${Math.round(sizeBytes / 1024)} KB）`)
   return { ok: true, path: zipPath, sizeBytes }
+}
+
+/** 递归复制目录，排除指定子目录名。 */
+function copyDirExcluding(src: string, dest: string, excludeNames: string[]): void {
+  fs.mkdirSync(dest, { recursive: true })
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (excludeNames.includes(entry.name)) continue
+    const from = path.join(src, entry.name)
+    const to = path.join(dest, entry.name)
+    if (entry.isDirectory()) {
+      fs.cpSync(from, to, { recursive: true })
+    } else if (entry.isFile()) {
+      fs.mkdirSync(path.dirname(to), { recursive: true })
+      fs.copyFileSync(from, to)
+    }
+  }
+}
+
+/** 覆盖式复制 src 到 dest（保留 dest 中 skipNames 目录，其余覆盖；备份外的新文件保留）。 */
+function copyDirIncluding(src: string, dest: string, skipNames: string[]): void {
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (skipNames.includes(entry.name)) continue
+    const from = path.join(src, entry.name)
+    const to = path.join(dest, entry.name)
+    if (entry.isDirectory()) {
+      fs.mkdirSync(to, { recursive: true })
+      fs.cpSync(from, to, { recursive: true })
+    } else if (entry.isFile()) {
+      fs.mkdirSync(path.dirname(to), { recursive: true })
+      fs.copyFileSync(from, to)
+    }
+  }
 }
 
 /** 列出全部备份。 */
@@ -106,12 +160,32 @@ export async function restoreBackup(workspaceDir: string, zipPath: string): Prom
     }
   }
 
-  const result = await runCommand({
-    command: 'tar',
-    args: ['-xf', zipPath, '-C', workspaceDir],
-    timeoutMs: ZIP_TIMEOUT_MS
-  })
-  if (result.error) return { ok: false, error: `恢复失败：${result.error}` }
+  // 白名单校验通过后解压到暂存目录，再复制回工作区（跳过 config/electron-userdata——Electron 缓存，应用锁定）
+  const staging = path.join(workspaceDir, 'tmp', `restore-stage-${Date.now()}`)
+  fs.mkdirSync(staging, { recursive: true })
+  try {
+    const result = await runCommand({
+      command: 'tar',
+      args: ['-xf', zipPath, '-C', staging],
+      timeoutMs: ZIP_TIMEOUT_MS
+    })
+    if (result.error) return { ok: false, error: `恢复失败：${result.error}` }
+    // 复制回工作区（config/electron-userdata 保持现状不清除）
+    for (const d of BACKUP_DIRS) {
+      const src = path.join(staging, d)
+      if (!fs.existsSync(src)) continue
+      const dest = path.join(workspaceDir, d)
+      fs.mkdirSync(dest, { recursive: true })
+      if (d === 'config') {
+        copyDirIncluding(src, dest, ['electron-userdata'])
+      } else {
+        // 覆盖式复制（保留备份之外的新文件，与标准 zip 解压语义一致）
+        fs.cpSync(src, dest, { recursive: true })
+      }
+    }
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true })
+  }
   logger.info(`备份已恢复：${zipPath}`)
   return { ok: true }
 }

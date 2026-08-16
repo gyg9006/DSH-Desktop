@@ -85,13 +85,17 @@ describe('createBackup / listBackups / restoreBackup / pruneBackups（真实 tar
   it('备份内容不含 runtime（体积/机器相关）', async () => {
     const ws = makeTempDir()
     makeWs(ws)
+    // 模拟被锁定的 Electron 缓存目录（备份必须排除，否则运行中应用会锁定导致失败）
+    fs.mkdirSync(path.join(ws, 'config', 'electron-userdata', 'session', 'Partitions'), { recursive: true })
+    fs.writeFileSync(path.join(ws, 'config', 'electron-userdata', 'session', 'Partitions', 'Cookies'), 'locked')
     const created = await createBackup(ws)
     expect(created.ok).toBe(true)
     const list = listBackups(ws)
-    // 用 tar 列出 zip 内容，确认无 runtime
+    // 用 tar 列出 zip 内容，确认无 runtime 且无 electron-userdata
     const { execSync } = await import('node:child_process')
     const listing = execSync(`tar -tf "${list[0].path}"`, { encoding: 'utf8' })
     expect(listing).not.toContain('runtime')
+    expect(listing).not.toContain('electron-userdata')
     for (const dir of BACKUP_DIRS) {
       expect(listing).toContain(dir)
     }

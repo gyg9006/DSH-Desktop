@@ -535,7 +535,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.BackupList, () => listBackups(getWorkspaceDir()))
 
   ipcMain.handle(IPC.BackupRestore, async (_event, zipPath: string) => {
+    // 恢复会覆盖 data/（会话/设置/凭据），必须先停止 dsh 服务避免文件占用与内存状态冲突
+    const wasRunning = (await getServiceSnapshot()).status === 'running'
+    if (wasRunning) {
+      await stopDshService()
+    }
     const result = await restoreBackup(getWorkspaceDir(), String(zipPath ?? ''))
+    if (result.ok) {
+      logger.info('备份恢复完成；dsh 服务已停止，需重启应用/服务后生效')
+    }
     return result
   })
 

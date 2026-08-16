@@ -188,22 +188,36 @@ function handleGuestAction(event: Event): void {
       .then(() => wv.reload())
       .catch(() => undefined)
   } else if (action === 'open-session') {
-    // 打开指定会话：在 dsh 工作区会话列表中按标题定位并点击
+    // 打开指定会话：dsh 会话列表在侧边栏（默认隐藏+折叠），需临时展开、显示并点击 treeitem。
+    // 点击后恢复侧边栏隐藏状态（ms 级，用户几乎无感知）。
     const title = String(detail?.payload ?? '')
     if (!title) return
-    wv.executeJavaScript(`(() => {
-      const items = [...document.querySelectorAll('button, [role=button], li, a, [class*=row], [class*=item], [class*=session]')]
-      const target = items
-        .filter(el => (el.innerText || '').trim() === ${JSON.stringify(title)})
-        .sort((a, b) => a.getBoundingClientRect().width - b.getBoundingClientRect().width)[0]
-      if (target) { target.click(); return 'clicked' }
-      // 兜底：包含标题的最近元素
-      const loose = items.find(el => {
-        const t = (el.innerText || '').trim()
-        return t.includes(${JSON.stringify(title)}) && t.length < 160
-      })
-      if (loose) { loose.click(); return 'clicked-loose' }
-      return 'no-hit'
+    wv.executeJavaScript(`(async () => {
+      const t = ${JSON.stringify(title)}
+      // 1. 临时显示侧边栏（解除我们的隐藏）
+      if (window.__dshwSidebarHelper) window.__dshwSidebarHelper.set(true)
+      // 2. 展开折叠的侧边栏（dsh 的「打开侧边栏」按钮）
+      const openToggle = [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || '').includes('打开侧边栏'))
+      if (openToggle) openToggle.click()
+      // 3. 等待树渲染，点击目标会话（标题精确匹配优先，其次包含匹配）
+      const deadline = Date.now() + 5000
+      const findAndClick = () => {
+        const items = [...document.querySelectorAll('[role=treeitem]')]
+        const exact = items.find(el => (el.innerText || '').trim().startsWith(t) || (el.innerText || '').includes(t))
+        const loose = exact || items.find(el => (el.innerText || '').includes(t))
+        if (loose) { loose.click(); return true }
+        return false
+      }
+      let ok = findAndClick()
+      while (!ok && Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 250))
+        ok = findAndClick()
+      }
+      // 4. 恢复隐藏
+      if (window.__dshwSidebarHelper) window.__dshwSidebarHelper.set(false)
+      const closeToggle = [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || '').includes('收起侧边栏'))
+      if (closeToggle) closeToggle.click()
+      return ok ? 'opened' : 'no-hit'
     })()`).catch(() => undefined)
   }
 }

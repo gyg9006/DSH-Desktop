@@ -368,6 +368,8 @@ export interface WorkspaceSessionEntry {
   id: string
   title: string
   time: number
+  /** 空会话（dsh 不展示，侧边栏过滤） */
+  blank?: boolean
 }
 
 export interface WorkspaceEntryPayload {

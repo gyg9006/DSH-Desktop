@@ -2,7 +2,6 @@ import { describe, expect, it, afterEach } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createZstdDecompress } from 'node:zlib'
 import { importSessionsFrom } from '../sessions'
 
 const tempDirs: string[] = []

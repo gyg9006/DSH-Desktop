@@ -8,7 +8,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readJsonFile } from '../shared/workspace'
-import { readSessionMeta } from './sessions'
+import { readSessionMeta, dshProjectKey } from './sessions'
 import { getWorkspaceDir } from './config'
 import { logger } from './logger'
 import { listSessionGroups, readFavorites, listArchived, readGroupMap } from './sessionOps'
@@ -58,22 +58,30 @@ export function readWorkspaces(workspaceDir: string): WorkspacesPayload {
     const sessions = sessionIds
       .map((sid) => {
         const info = meta.get(sid)
-        // 会话文件（dsh 布局：sessions/<cwd>/<sid>/session.jsonl[.zstd]）
+        // 会话文件（dsh 布局：sessions/<projectKey(cwd)>/<sid>/session.jsonl[.zstd]）
         let time = 0
-        const cwdGroup = wsPath.replace(/[\\/:*?"<>|]/g, '-')
-        const sessionDir = path.join(sessionsRoot, cwdGroup, sid)
+        const sessionDir = path.join(sessionsRoot, dshProjectKey(wsPath), sid)
+        let logSize = 0
         if (fs.existsSync(sessionDir)) {
           const files = fs.readdirSync(sessionDir)
           const log = files.find((f) => /^session\.jsonl(\.zstd)?$/.test(f))
-          if (log) time = fs.statSync(path.join(sessionDir, log)).mtimeMs
+          if (log) {
+            const stat = fs.statSync(path.join(sessionDir, log))
+            time = stat.mtimeMs
+            logSize = stat.size
+          }
         }
         return {
           id: sid,
           title: info?.title?.trim() || sid,
-          time: info?.createdAt ?? time
+          time: info?.createdAt ?? time,
+          // 空会话标记：dsh 空会话文件只有 header 帧（<2KB，正常会话远大于）
+          blank: logSize > 0 && logSize < 2048
         }
       })
       .sort((a, b) => b.time - a.time)
+    // 过滤空会话：dsh web 不展示 blank 会话（sessionVisible: !blank || current），
+    // 侧边栏同步过滤，避免出现「打不开」的假会话
     workspaces.push({ id, title, path: wsPath, sessionCount: sessions.length, sessions })
   }
 
@@ -101,10 +109,10 @@ export function readWorkspaces(workspaceDir: string): WorkspacesPayload {
 /** 侧边栏会话视图完整数据：工作区树 + 分组 + 归档 + 收藏。 */
 export function readSidebarData(workspaceDir: string): SidebarDataPayload {
   const archivedIndex = readArchivedIndexRaw(workspaceDir)
-  // 日常会话 = 未归档的会话
+  // 日常会话 = 未归档的会话；空会话（dsh 不展示）一并过滤
   const base = readWorkspaces(workspaceDir)
   for (const ws of base.workspaces) {
-    ws.sessions = ws.sessions.filter((s) => !archivedIndex[s.id])
+    ws.sessions = ws.sessions.filter((s) => !archivedIndex[s.id] && !s.blank)
     ws.sessionCount = ws.sessions.length
   }
   const groups = listSessionGroups(workspaceDir)

@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto'
 import { readJsonFile, writeJsonAtomic } from '../shared/workspace'
 import { logger } from './logger'
 import { removeSessionFromRegistry, unarchiveSessionInRegistry, findSessionWorkspace } from './workspaces'
+import { dshProjectKey } from './sessions'
 import type { ArchivedSessionEntry, SessionGroupInfo, SessionOpResult } from '../shared/ipc'
 
 // ---------------------------------------------------------------------------
@@ -252,13 +253,13 @@ export function unarchiveSession(workspaceDir: string, sessionId: string): Sessi
     const entry = index.entries[sessionId]
     const workspacePath = entry?.workspacePath
 
-    // 目标目录：原工作区路径转义组名；无记录时回退到当前工作区组
+    // 目标目录：原工作区路径转义组名（dsh projectKey 规则）；无记录时回退到当前工作区组
     let groupName: string
     if (typeof workspacePath === 'string' && workspacePath.trim()) {
-      groupName = workspacePath.replace(/[\\/:*?"<>|]/g, '-')
+      groupName = dshProjectKey(workspacePath)
     } else {
       const ws = findSessionWorkspace(workspaceDir, sessionId)
-      groupName = ws ? ws.path.replace(/[\\/:*?"<>|]/g, '-') : 'restored'
+      groupName = ws ? dshProjectKey(ws.path) : '--restored--'
     }
     const sessionsRoot = path.join(workspaceDir, 'data', 'sessions')
     const destDir = path.join(sessionsRoot, groupName, sessionId)

@@ -40,8 +40,8 @@ async function bootDsh(ws: string, port: number): Promise<{ ok: boolean; items: 
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ type: 'client-request', rpcId: 'boot-' + Date.now(), method: 'session.list', payload: {} })
     })
-    const body = await res.json()
-    items = (body.result?.value?.items ?? []).map((it: { sessionId: string; blank?: boolean; projections?: { values?: { sessionStats?: { turns?: number } } } }) => ({
+    const body = (await res.json()) as { result?: { value?: { items?: Array<{ sessionId: string; blank?: boolean; projections?: { values?: { sessionStats?: { turns?: number } } } }> } } }
+    items = (body.result?.value?.items ?? []).map((it) => ({
       id: it.sessionId,
       blank: it.blank === true,
       turns: it.projections?.values?.sessionStats?.turns ?? 0

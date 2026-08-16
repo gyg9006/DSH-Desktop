@@ -15,6 +15,7 @@ import {
   readGroupMap
 } from '../sessionOps'
 import { readWorkspaces, readSidebarData } from '../workspaces'
+import { dshProjectKey } from '../sessions'
 
 const tempDirs: string[] = []
 
@@ -32,9 +33,10 @@ afterEach(() => {
 function makeWorkspace(ws: string, wsPath: string, sessionIds: string[]): string {
   const sessionsRoot = path.join(ws, 'data', 'sessions')
   for (const id of sessionIds) {
-    const dir = path.join(sessionsRoot, wsPath.replace(/[\\/:*?"<>|]/g, '-'), id)
+    // dsh projectKey 规则：--<sanitized>--；写入足够内容避免被判为空会话
+    const dir = path.join(sessionsRoot, dshProjectKey(wsPath), id)
     fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(path.join(dir, 'session.jsonl.zstd'), 'zstd')
+    fs.writeFileSync(path.join(dir, 'session.jsonl.zstd'), Buffer.alloc(8192, 1))
   }
   const registry = {
     unit: { name: 'workspace', version: 2 },
@@ -77,8 +79,8 @@ describe('deleteSessionGroup（删除分组）', () => {
     expect(after.groups.length).toBe(0)
     expect(after.map['session-a']).toBeUndefined()
     // 会话文件仍在（移回工作文件夹）
-    expect(fs.existsSync(path.join(ws, 'data', 'sessions', 'C--work', 'session-a'))).toBe(true)
-    expect(fs.existsSync(path.join(ws, 'data', 'sessions', 'C--work', 'session-b'))).toBe(true)
+    expect(fs.existsSync(path.join(ws, 'data', 'sessions', '--C-work--', 'session-a'))).toBe(true)
+    expect(fs.existsSync(path.join(ws, 'data', 'sessions', '--C-work--', 'session-b'))).toBe(true)
   })
 
   it('包含内容：分组与会话一起删除', () => {
@@ -92,9 +94,9 @@ describe('deleteSessionGroup（删除分组）', () => {
     expect(result.ok).toBe(true)
     expect(result.count).toBe(1)
     // 会话目录被删除
-    expect(fs.existsSync(path.join(ws, 'data', 'sessions', 'C--work', 'session-a'))).toBe(false)
+    expect(fs.existsSync(path.join(ws, 'data', 'sessions', '--C-work--', 'session-a'))).toBe(false)
     // 未分组的 session-b 不受影响
-    expect(fs.existsSync(path.join(ws, 'data', 'sessions', 'C--work', 'session-b'))).toBe(true)
+    expect(fs.existsSync(path.join(ws, 'data', 'sessions', '--C-work--', 'session-b'))).toBe(true)
     // 注册表同步移除
     const workspaces = readWorkspaces(ws)
     const wsEntry = workspaces.workspaces.find((w) => w.id === 'ws-1')!
@@ -113,9 +115,9 @@ describe('deleteLiveSessions（批量删除会话）', () => {
     const result = deleteLiveSessions(ws, ['session-a', 'session-b'])
     expect(result.ok).toBe(true)
     expect(result.count).toBe(2)
-    expect(fs.existsSync(path.join(ws, 'data', 'sessions', 'C--work', 'session-a'))).toBe(false)
-    expect(fs.existsSync(path.join(ws, 'data', 'sessions', 'C--work', 'session-b'))).toBe(false)
-    expect(fs.existsSync(path.join(ws, 'data', 'sessions', 'C--work', 'session-c'))).toBe(true)
+    expect(fs.existsSync(path.join(ws, 'data', 'sessions', '--C-work--', 'session-a'))).toBe(false)
+    expect(fs.existsSync(path.join(ws, 'data', 'sessions', '--C-work--', 'session-b'))).toBe(false)
+    expect(fs.existsSync(path.join(ws, 'data', 'sessions', '--C-work--', 'session-c'))).toBe(true)
     // 分组映射清理
     expect(readGroupMap(ws)['session-a']).toBeUndefined()
     // 注册表清理
@@ -128,7 +130,27 @@ describe('deleteLiveSessions（批量删除会话）', () => {
     const ws = makeWorkspace(makeTempDir(), 'C:\\work', ['session-x'])
     const result = deleteLiveSession(ws, 'session-x')
     expect(result.ok).toBe(true)
-    expect(fs.existsSync(path.join(ws, 'data', 'sessions', 'C--work', 'session-x'))).toBe(false)
+    expect(fs.existsSync(path.join(ws, 'data', 'sessions', '--C-work--', 'session-x'))).toBe(false)
+  })
+})
+
+describe('空会话过滤（dsh 不展示 blank 会话，侧边栏同步过滤）', () => {
+  it('空会话（仅 header，<2KB）不出现在侧边栏；正常会话保留', () => {
+    const ws = makeWorkspace(makeTempDir(), 'C:\\work', ['session-full', 'session-empty'])
+    // 正常会话：写入较大内容
+    fs.writeFileSync(
+      path.join(ws, 'data', 'sessions', '--C-work--', 'session-full', 'session.jsonl.zstd'),
+      Buffer.alloc(8192, 1)
+    )
+    // 空会话：仅 header 大小的文件
+    fs.writeFileSync(
+      path.join(ws, 'data', 'sessions', '--C-work--', 'session-empty', 'session.jsonl.zstd'),
+      Buffer.alloc(300, 1)
+    )
+    const sidebar = readSidebarData(ws)
+    const ids = sidebar.workspaces[0].sessions.map((s) => s.id)
+    expect(ids).toContain('session-full')
+    expect(ids).not.toContain('session-empty')
   })
 })
 
@@ -146,7 +168,7 @@ describe('archive / unarchive / deleteArchived', () => {
     expect(u.ok).toBe(true)
     expect(listArchived(ws).length).toBe(0)
     // 目录回到 sessions 下
-    expect(fs.existsSync(path.join(ws, 'data', 'sessions', 'C--work', 'session-a'))).toBe(true)
+    expect(fs.existsSync(path.join(ws, 'data', 'sessions', '--C-work--', 'session-a'))).toBe(true)
     // dsh 归档集移除
     const registry = JSON.parse(fs.readFileSync(path.join(ws, 'data', 'storages', 'workspace.json'), 'utf8')) as { global: { archivedSessionIds: string[] } }
     expect(registry.global.archivedSessionIds).not.toContain('session-a')

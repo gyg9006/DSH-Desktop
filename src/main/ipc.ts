@@ -280,9 +280,16 @@ export function registerIpcHandlers(): void {
     return { ok: true }
   })
 
-  ipcMain.handle(IPC.AppRelaunch, () => {
+  ipcMain.handle(IPC.AppRelaunch, async () => {
+    // 优雅重启：先显式停止 dsh 服务（含进程树清理），再 relaunch + quit。
+    // 不能用 app.exit(0) 直接退出——会跳过 before-quit，导致 dsh 服务残留占端口。
+    try {
+      await stopDshService()
+    } catch {
+      /* 忽略：before-quit 还会兜底 */
+    }
     app.relaunch()
-    app.exit(0)
+    app.quit()
     return { ok: true }
   })
 
@@ -476,7 +483,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.WorkspacesGet, () => readWorkspaces(getWorkspaceDir()))
 
   ipcMain.handle(IPC.WorkspaceRename, async (_event, id: string, title: string) => {
-    return renameWorkspace(getWorkspaceDir(), String(id ?? ''), String(title ?? ''))
+    const result = await renameWorkspace(getWorkspaceDir(), String(id ?? ''), String(title ?? ''))
+    if (result.ok) broadcastUiEvent('sidebar-data-changed')
+    return result
   })
 
   ipcMain.handle(IPC.WorkspaceDelete, async (_event, id: string) => {
@@ -489,8 +498,10 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SessionGroupCreate, (_event, name: string, workspaceId: string) => {
     return createSessionGroup(getWorkspaceDir(), String(name ?? ''), String(workspaceId ?? ''))
   })
-  ipcMain.handle(IPC.SessionGroupRename, (_event, id: string, name: string) => {
-    return renameSessionGroup(getWorkspaceDir(), String(id ?? ''), String(name ?? ''))
+  ipcMain.handle(IPC.SessionGroupRename, async (_event, id: string, name: string) => {
+    const result = renameSessionGroup(getWorkspaceDir(), String(id ?? ''), String(name ?? ''))
+    if (result.ok) broadcastUiEvent('sidebar-data-changed')
+    return result
   })
   ipcMain.handle(IPC.SessionGroupPin, (_event, id: string) => {
     return pinSessionGroup(getWorkspaceDir(), String(id ?? ''))
@@ -504,8 +515,10 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SessionSetFavorite, (_event, sessionId: string, favorite: boolean) => {
     return setSessionFavorite(getWorkspaceDir(), String(sessionId ?? ''), favorite === true)
   })
-  ipcMain.handle(IPC.SessionRename, (_event, sessionId: string, title: string) => {
-    return renameSessionRpc(getWorkspaceDir(), String(sessionId ?? ''), String(title ?? ''))
+  ipcMain.handle(IPC.SessionRename, async (_event, sessionId: string, title: string) => {
+    const result = await renameSessionRpc(getWorkspaceDir(), String(sessionId ?? ''), String(title ?? ''))
+    if (result.ok) broadcastUiEvent('sidebar-data-changed')
+    return result
   })
   ipcMain.handle(IPC.SessionFork, (_event, sessionId: string) => {
     return forkSessionRpc(getWorkspaceDir(), String(sessionId ?? ''))
@@ -524,6 +537,35 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.SessionUnarchive, (_event, sessionId: string) => {
     return unarchiveSession(getWorkspaceDir(), String(sessionId ?? ''))
+  })
+
+  // 导出会话：调用 dsh 官方 /api/session.export（含子代理与附件）下载 ZIP，保存到用户选择的位置
+  ipcMain.handle(IPC.SessionExport, async (_event, sessionId: string, title: string) => {
+    try {
+      const id = String(sessionId ?? '')
+      if (!id) return { ok: false, error: '会话不存在' }
+      const cfg = readAppConfig()
+      const port = (cfg.service as { lastPort?: unknown } | undefined)?.lastPort
+      const p = typeof port === 'number' && port > 0 ? port : 3080
+      const url = `http://127.0.0.1:${p}/api/session.export?sessionId=${encodeURIComponent(id)}&includeDescendants=true`
+      const res = await fetch(url, { headers: { accept: 'application/zip' }, signal: AbortSignal.timeout(300000) })
+      if (!res.ok) return { ok: false, error: `导出失败：HTTP ${res.status}` }
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (buf.length === 0) return { ok: false, error: '导出失败：会话内容为空' }
+      // 保存对话框（默认名：dsh-session-<短id>.zip）
+      const safe = title ? String(title).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) : id.slice(0, 12)
+      const save = await dialog.showSaveDialog({
+        title: '导出会话',
+        defaultPath: `dsh-session-${safe}.zip`,
+        filters: [{ name: 'Zip 压缩包', extensions: ['zip'] }]
+      })
+      if (save.canceled || !save.filePath) return { ok: false, canceled: true }
+      fs.writeFileSync(save.filePath, buf)
+      logger.info(`会话 ${id} 已导出到 ${save.filePath}（${Math.round(buf.length / 1024)} KB）`)
+      return { ok: true, path: save.filePath, sizeBytes: buf.length }
+    } catch (error) {
+      return { ok: false, error: `导出失败：${error instanceof Error ? error.message : String(error)}` }
+    }
   })
 
   // ---------- M5：备份与恢复（Tab5） ----------

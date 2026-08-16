@@ -2,7 +2,7 @@ import { describe, expect, it, afterEach } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { readSessionMeta, listSessions, pinSession, readSessionPins, deleteSession } from '../sessions'
+import { readSessionMeta, listSessions, pinSession, readSessionPins, deleteSession, updateSessionTitleInProjCache } from '../sessions'
 
 const tempDirs: string[] = []
 
@@ -118,5 +118,52 @@ describe('pinSession / deleteSession', () => {
     // 再删一次应报未找到
     const again = deleteSession(ws, 'session-del')
     expect(again.ok).toBe(false)
+  })
+})
+
+describe('updateSessionTitleInProjCache（重命名后立即生效）', () => {
+  it('更新指定会话标题，保留其他字段与结构', () => {
+    const ws = makeTempDir()
+    fs.mkdirSync(path.join(ws, 'data', 'storages'), { recursive: true })
+    const proj = {
+      unit: { name: 'session_projcache', version: 3 },
+      tables: {
+        sessions: {
+          'session-a': {
+            identity: { createdAt: 1000, cwd: 'F:\\work' },
+            rows: { title: { ver: 1, seq: 5, val: '旧标题' }, sessionStats: { ver: 1, seq: 1, val: { turns: 2 } } }
+          },
+          'session-b': {
+            identity: { createdAt: 2000 },
+            rows: { title: { ver: 1, seq: 1, val: '保持' } }
+          }
+        }
+      }
+    }
+    fs.writeFileSync(path.join(ws, 'data', 'storages', 'session_projcache.json'), JSON.stringify(proj))
+
+    updateSessionTitleInProjCache(ws, 'session-a', '新标题')
+
+    const after = JSON.parse(fs.readFileSync(path.join(ws, 'data', 'storages', 'session_projcache.json'), 'utf8'))
+    expect(after.tables.sessions['session-a'].rows.title.val).toBe('新标题')
+    expect(after.tables.sessions['session-a'].rows.title.seq).toBeGreaterThan(5)
+    // 其他字段保留
+    expect(after.tables.sessions['session-a'].identity.createdAt).toBe(1000)
+    expect(after.tables.sessions['session-a'].rows.sessionStats.val.turns).toBe(2)
+    // 其他会话不受影响
+    expect(after.tables.sessions['session-b'].rows.title.val).toBe('保持')
+    // 读取方立即看到新标题
+    const meta = readSessionMeta(after)
+    expect(meta.get('session-a')?.title).toBe('新标题')
+  })
+
+  it('不存在的会话不报错', () => {
+    const ws = makeTempDir()
+    fs.mkdirSync(path.join(ws, 'data', 'storages'), { recursive: true })
+    fs.writeFileSync(
+      path.join(ws, 'data', 'storages', 'session_projcache.json'),
+      JSON.stringify({ tables: { sessions: { 'session-x': { identity: { createdAt: 1 }, rows: {} } } } })
+    )
+    expect(() => updateSessionTitleInProjCache(ws, 'session-zzz', 'x')).not.toThrow()
   })
 })

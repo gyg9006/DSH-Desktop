@@ -128,8 +128,17 @@ function readArchivedIndexRaw(workspaceDir: string): Record<string, unknown> {
   return raw?.entries && typeof raw.entries === 'object' ? (raw.entries as Record<string, unknown>) : {}
 }
 
-/** dsh RPC 调用（服务运行时优先走 RPC，保证与 dsh 注册表一致）。 */
-async function callWorkspaceRpc(workspaceDir: string, method: string, payload: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+/**
+ * dsh RPC 调用（服务运行时优先走 RPC，保证与 dsh 注册表一致）。
+ * 返回 { ok, error?, unreachable? }：unreachable=true 表示服务不可达（网络/HTTP 层失败），
+ * 调用方仅在不可达时可回退本地注册表写；业务错误（ok=false 且 unreachable=false）必须透传，
+ * 否则会与 dsh 内存态产生分歧（dsh 下一次发布会覆盖本地写）。
+ */
+async function callWorkspaceRpc(
+  workspaceDir: string,
+  method: string,
+  payload: Record<string, unknown>
+): Promise<{ ok: boolean; error?: string; unreachable?: boolean }> {
   try {
     const cfg = readJsonFile(path.join(workspaceDir, 'config', 'app.json')) as { service?: { lastPort?: unknown } } | null
     const port = typeof cfg?.service?.lastPort === 'number' ? cfg.service.lastPort : 3080
@@ -139,14 +148,14 @@ async function callWorkspaceRpc(workspaceDir: string, method: string, payload: R
       body: JSON.stringify({ type: 'client-request', rpcId: `dshw-${Date.now()}`, method, payload }),
       signal: AbortSignal.timeout(10000)
     })
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, unreachable: true }
     const body = (await res.json()) as { result?: { ok?: unknown; error?: { message?: unknown } } }
     if (body.result?.ok !== true) {
-      return { ok: false, error: body.result?.error?.message ? String(body.result.error.message) : 'RPC 失败' }
+      return { ok: false, error: body.result?.error?.message ? String(body.result.error.message) : 'RPC 失败', unreachable: false }
     }
     return { ok: true }
   } catch {
-    return { ok: false, error: 'RPC 不可达' }
+    return { ok: false, error: 'RPC 不可达', unreachable: true }
   }
 }
 
@@ -175,7 +184,15 @@ function writeRegistry(workspaceDir: string, mutate: (doc: RegistryDoc) => void)
   }
   mutate(doc)
   fs.mkdirSync(path.dirname(p), { recursive: true })
-  fs.writeFileSync(p, JSON.stringify(doc, null, 2), 'utf8')
+  // 原子写（临时文件 + rename），避免与 dsh 写链并发时产生半写文件
+  const tmp = `${p}.dshw-${process.pid}-${Date.now()}`
+  fs.writeFileSync(tmp, JSON.stringify(doc, null, 2), 'utf8')
+  try {
+    fs.renameSync(tmp, p)
+  } catch {
+    fs.copyFileSync(tmp, p)
+    fs.unlinkSync(tmp)
+  }
 }
 
 /** 从工作区注册表移除会话（sessionIds + archivedSessionIds），供删除会话时同步 dsh。 */
@@ -207,34 +224,47 @@ export function findSessionWorkspace(workspaceDir: string, sessionId: string): {
   return null
 }
 
-/** 重命名工作区。 */
+/** 重命名工作区（RPC 成功后同步本地注册表，确保界面即时生效；仅 RPC 不可达时回退本地写）。 */
 export async function renameWorkspace(workspaceDir: string, id: string, title: string): Promise<{ ok: boolean; error?: string }> {
   const t = title.trim()
   if (!t) return { ok: false, error: '名称不能为空' }
   const rpc = await callWorkspaceRpc(workspaceDir, 'workspace.rename', { workspaceId: id, title: t })
   if (rpc.ok) {
     logger.info(`工作区 ${id} 已重命名为 ${t}`)
+    // 同步本地注册表（即使 RPC 成功也写，保证 readWorkspaces 立即读到新标题；
+    // dsh 响应前已落盘，双写内容一致、last-write-wins 无害）
+    try {
+      writeRegistry(workspaceDir, (doc) => {
+        if (doc.tables?.workspaces?.[id]) doc.tables.workspaces[id].title = t
+      })
+    } catch {
+      // 忽略：dsh 已落盘
+    }
     return { ok: true }
   }
-  // RPC 不可达 → 直接编辑注册表（dsh-storage-json 热重载）
+  // 业务错误（重名冲突、不存在等）直接透传，不得回退本地写（会被 dsh 下次发布覆盖）
+  if (rpc.unreachable !== true) return { ok: false, error: rpc.error ?? '重命名失败' }
+  // 仅服务不可达 → 直接编辑注册表（dsh 未运行时本地生效；dsh 运行后会以服务为准）
   try {
     writeRegistry(workspaceDir, (doc) => {
       if (doc.tables?.workspaces?.[id]) doc.tables.workspaces[id].title = t
     })
-    logger.info(`工作区 ${id} 已重命名为 ${t}（本地注册表）`)
+    logger.info(`工作区 ${id} 已重命名为 ${t}（本地注册表，服务不可达）`)
     return { ok: true }
   } catch (error) {
     return { ok: false, error: `重命名失败：${error instanceof Error ? error.message : String(error)}` }
   }
 }
 
-/** 删除工作区（注册表移除；RPC 不可达时同时询问是否删除会话目录由调用方决定）。 */
+/** 删除工作区（注册表移除；仅服务不可达时回退本地删除，业务错误透传）。 */
 export async function deleteWorkspace(workspaceDir: string, id: string): Promise<{ ok: boolean; error?: string }> {
   const rpc = await callWorkspaceRpc(workspaceDir, 'workspace.delete', { workspaceId: id })
   if (rpc.ok) {
     logger.info(`工作区 ${id} 已删除`)
     return { ok: true }
   }
+  // 业务错误（不存在等）直接透传，不删除本地数据
+  if (rpc.unreachable !== true) return { ok: false, error: rpc.error ?? '删除失败' }
   try {
     let removedPath = ''
     writeRegistry(workspaceDir, (doc) => {
@@ -250,7 +280,7 @@ export async function deleteWorkspace(workspaceDir: string, id: string): Promise
       const dir = path.join(sessionsRoot, group)
       if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
     }
-    logger.info(`工作区 ${id} 已删除（本地注册表）`)
+    logger.info(`工作区 ${id} 已删除（本地注册表，服务不可达）`)
     return { ok: true }
   } catch (error) {
     return { ok: false, error: `删除失败：${error instanceof Error ? error.message : String(error)}` }

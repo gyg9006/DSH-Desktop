@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto'
 import { readJsonFile, writeJsonAtomic } from '../shared/workspace'
 import { logger } from './logger'
 import { removeSessionFromRegistry, unarchiveSessionInRegistry, findSessionWorkspace } from './workspaces'
-import { dshProjectKey } from './sessions'
+import { dshProjectKey, updateSessionTitleInProjCache } from './sessions'
 import type { ArchivedSessionEntry, SessionGroupInfo, SessionOpResult } from '../shared/ipc'
 
 // ---------------------------------------------------------------------------
@@ -373,10 +373,15 @@ async function callRpc(workspaceDir: string, method: string, payload: Record<str
   }
 }
 
-export function renameSessionRpc(workspaceDir: string, sessionId: string, title: string): Promise<SessionOpResult> {
+export async function renameSessionRpc(workspaceDir: string, sessionId: string, title: string): Promise<SessionOpResult> {
   const t = title.trim()
   if (!t) return Promise.resolve({ ok: false, error: '标题不能为空' })
-  return callRpc(workspaceDir, 'session.rename', { sessionId, title: t })
+  const result = await callRpc(workspaceDir, 'session.rename', { sessionId, title: t })
+  if (result.ok) {
+    // 立即同步本地 projcache 标题，避免侧边栏刷新读到 dsh 异步写入前的旧值
+    updateSessionTitleInProjCache(workspaceDir, sessionId, t)
+  }
+  return result
 }
 
 export function forkSessionRpc(workspaceDir: string, sessionId: string): Promise<SessionOpResult> {

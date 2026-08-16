@@ -241,6 +241,8 @@ const api = {
     ipcRenderer.invoke(IPC.SessionDeleteBatch, sessionIds),
   unarchiveSession: (sessionId: string): Promise<SessionOpResult> =>
     ipcRenderer.invoke(IPC.SessionUnarchive, sessionId),
+  exportSession: (sessionId: string, title: string): Promise<{ ok: boolean; canceled?: boolean; path?: string; sizeBytes?: number; error?: string }> =>
+    ipcRenderer.invoke(IPC.SessionExport, sessionId, title),
 
   // ---------- M5：备份与恢复 ----------
   createBackup: (): Promise<{ ok: boolean; path?: string; sizeBytes?: number; error?: string }> =>

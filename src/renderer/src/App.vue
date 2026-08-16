@@ -42,6 +42,10 @@ onMounted(async () => {
     if (type === 'toggle-sidebar') ui.toggleSidebar()
     else if (type === 'new-chat') ui.newChat()
     else if (type === 'open-settings') ui.openSettings()
+    else if (type === 'sidebar-data-changed') {
+      // 重命名等操作后侧边栏数据已变：通知侧边栏刷新
+      window.dispatchEvent(new CustomEvent('dshw:sidebar-data-changed'))
+    }
   })
 })
 

@@ -120,9 +120,10 @@ function attachWebviewListeners(): void {
   wv.addEventListener('did-fail-load', () => {
     webviewError.value = true
   })
-  // 页面一开始加载就尝试隐藏 dsh 侧边栏，避免闪烁（insertCSS 已注入的 CSS 在 reload 后持续生效）
+  // 页面一开始加载只注入 CSS（insertCSS 不依赖 DOM，reload 后持续生效 → 零闪显；
+  // 此时 webview 尚未 dom-ready，不能调用 executeJavaScript）
   wv.addEventListener('did-start-loading', () => {
-    injectSidebarHelper()
+    injectRailHideCss()
   })
   wv.addEventListener('did-finish-load', () => {
     webviewError.value = false

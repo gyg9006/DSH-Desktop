@@ -62,7 +62,27 @@ export async function expandImportArchives(
 
 interface ProjCacheShape {
   tables?: {
-    sessions?: Record<string, { identity?: { createdAt?: number }; rows?: { title?: { val?: string } } }>
+    sessions?: Record<string, { identity?: { createdAt?: number }; rows?: { title?: { ver?: number; seq?: number; val?: string } } }>
+  }
+}
+
+/**
+ * 直接更新 projcache 中会话的标题（重命名后立即生效）。
+ * dsh 的 session.rename 会异步写 projcache，侧边栏若立即刷新会读到旧标题；
+ * 此函数在 RPC 成功后同步更新本地缓存，保证界面即时反映新名称。
+ */
+export function updateSessionTitleInProjCache(workspaceDir: string, sessionId: string, title: string): void {
+  try {
+    const p = path.join(workspaceDir, 'data', 'storages', 'session_projcache.json')
+    const raw = readJsonFile(p) as ProjCacheShape | null
+    if (!raw?.tables?.sessions) return
+    const entry = raw.tables.sessions[sessionId]
+    if (!entry) return
+    entry.rows ??= {}
+    entry.rows.title = { ver: 1, seq: (entry.rows.title?.seq ?? 0) + 1, val: title }
+    writeJsonAtomic(p, raw)
+  } catch {
+    // projcache 由 dsh 维护，更新失败不阻塞重命名（下次 dsh 写入会覆盖）
   }
 }
 

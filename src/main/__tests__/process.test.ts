@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from 'vitest'
+import { describe, expect, it, afterEach, beforeEach } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -17,6 +17,18 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true })
   }
+})
+
+// 隔离外部 PATH：测试进程的 PATH 可能被开发环境注入 portable runtime 目录，
+// 导致「不存在的运行时目录被过滤」断言受宿主环境干扰。这里在 buildChildEnv 相关
+// 用例中固定 process.env.PATH，保证确定性。
+const ORIGINAL_PATH = process.env.PATH
+beforeEach(() => {
+  // 置为干净的最小 PATH（不含 runtime），构建环境断言只关心注入逻辑本身
+  process.env.PATH = 'C:\\Windows\\System32;C:\\Windows'
+})
+afterEach(() => {
+  process.env.PATH = ORIGINAL_PATH
 })
 
 describe('buildChildEnv（子进程环境构造）', () => {

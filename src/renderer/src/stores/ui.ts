@@ -37,11 +37,13 @@ export const useUiStore = defineStore('ui', {
         ElMessage.info('请先启动服务')
       }
     },
-    /** 启动/停止服务（对接 dshService）。 */
+    /** 启动/停止服务（对接 dshService；停止后应用保持运行，仅停止后台 dsh 服务）。 */
     async toggleService(): Promise<void> {
       const service = useServiceStore()
       if (service.status === 'running' || service.status === 'starting') {
         await service.stop()
+        // 服务已停止：桌面端保持运行，明确提示（避免误以为应用退出）
+        ElMessage.success('dsh 服务已停止，应用保持运行')
       } else {
         const result = await service.start()
         if (!result.ok && result.error) {

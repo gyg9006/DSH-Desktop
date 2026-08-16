@@ -65,6 +65,7 @@ export const IPC = {
   SessionDeleteArchivedBatch: 'sessions:delete-archived-batch',
   SessionDeleteBatch: 'sessions:delete-batch',
   SessionUnarchive: 'sessions:unarchive',
+  SessionExport: 'sessions:export',
   BackupCreate: 'backup:create',
   BackupList: 'backup:list',
   BackupRestore: 'backup:restore',
@@ -94,7 +95,7 @@ export type ThemeMode = 'light' | 'dark' | 'system'
 
 export type ServiceStatus = 'stopped' | 'starting' | 'running' | 'error'
 
-export type UiEventType = 'toggle-sidebar' | 'new-chat' | 'open-settings'
+export type UiEventType = 'toggle-sidebar' | 'new-chat' | 'open-settings' | 'sidebar-data-changed'
 
 export interface AppInfo {
   appName: string

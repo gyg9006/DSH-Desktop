@@ -103,12 +103,22 @@ if (!gotLock) {
     refreshTrayMenu(() => getMainWindow())
   })
 
-  app.on('window-all-closed', () => {
-    app.quit()
-  })
-
   // 退出时优雅关闭 dsh 服务（正常终止，宽限 3 秒后强制，规格 4.5）
   let quitting = false
+
+  // 关闭窗口不退出应用：隐藏到托盘继续驻留（服务与数据仍在后台）。
+  // 在窗口 close 事件里拦截（hide 而非销毁）；真正的退出走托盘「退出」菜单。
+  const win = getMainWindow()
+  win?.on('close', (e) => {
+    if (!quitting) {
+      e.preventDefault()
+      win.hide()
+    }
+  })
+  app.on('window-all-closed', () => {
+    // 不退出：桌面端常驻托盘（最小化/关闭均隐藏）
+  })
+
   app.on('before-quit', (event) => {
     if (quitting || !isServiceRunning()) return
     event.preventDefault()

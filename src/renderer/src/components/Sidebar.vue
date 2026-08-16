@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, ElSelect, ElOption } from 'element-plus'
 import type { ElMessageBoxOptions } from 'element-plus'
 import {
@@ -35,7 +35,8 @@ import {
   Folder,
   Aim,
   CopyDocument,
-  List
+  List,
+  Download
 } from '@element-plus/icons-vue'
 import AppLogo from './AppLogo.vue'
 import { useAppStore } from '../stores/app'
@@ -69,6 +70,7 @@ const wsLoaded = ref(false)
 const expandedWs = ref<Set<string>>(new Set())
 const expandedGroups = ref<Set<string>>(new Set())
 const actionBusy = ref<string | null>(null)
+const exportingSession = ref(false)
 const searchOpen = ref(false)
 const searchText = ref('')
 /** 归档搜索：关键词 + 时间 */
@@ -544,6 +546,7 @@ async function sessionCmd(cmd: string, session: WorkspaceSessionEntry, _groupId:
   if (cmd === 'favorite') return toggleFavorite(session.id, favorites.value.has(session.id))
   if (cmd === 'move') pickGroup(session.id, session.title)
   if (cmd === 'back-to-workspace') return backToWorkspace(session)
+  if (cmd === 'export') return exportSessionItem(session)
   if (cmd === 'delete') return deleteSessionItem(session)
 }
 
@@ -570,12 +573,28 @@ async function deleteSessionItem(session: WorkspaceSessionEntry): Promise<void> 
   else ElMessage.error(result.error ?? '删除失败')
 }
 
+/** 导出会话：调用 dsh 官方导出（含子代理与附件）保存 ZIP。 */
+async function exportSessionItem(session: WorkspaceSessionEntry): Promise<void> {
+  exportingSession.value = true
+  try {
+    const result = await window.dshw.exportSession(session.id, session.title)
+    if (result.ok) {
+      ElMessage.success('会话已导出')
+    } else if (!result.canceled) {
+      ElMessage.error(result.error ?? '导出失败')
+    }
+  } finally {
+    exportingSession.value = false
+  }
+}
+
 /** 归档会话右键菜单命令。 */
 async function archiveCmd(cmd: string, a: ArchivedSessionEntry): Promise<void> {
   if (cmd === 'favorite') return toggleFavorite(a.sessionId, favorites.value.has(a.sessionId))
   if (cmd === 'delete') return deleteArchivedItem(a)
   if (cmd === 'move') pickGroup(a.sessionId, a.title)
   if (cmd === 'unarchive') return unarchiveItem(a)
+  if (cmd === 'export') return exportSessionItem({ id: a.sessionId, title: a.title, time: a.time })
 }
 
 /** 还原到工作区（取消归档）。 */
@@ -617,6 +636,12 @@ onMounted(() => {
   if (sv.groupBy === 'flat') viewMode.value.groupBy = 'flat'
   if (sv.orderBy === 'manual') viewMode.value.orderBy = 'manual'
   void refreshData()
+  // 重命名等操作后（含从 dsh 端发起）刷新侧边栏数据
+  window.addEventListener('dshw:sidebar-data-changed', refreshData)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('dshw:sidebar-data-changed', refreshData)
 })
 
 const statusText = computed(() => {
@@ -853,7 +878,7 @@ const SETTING_ITEMS = [
                           <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(s.id) ? '取消收藏' : '收藏' }}</el-dropdown-item>
                           <el-dropdown-item v-if="data.groupMap[s.id]" command="back-to-workspace" :icon="Back" divided>返回工作区</el-dropdown-item>
                           <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
-                          <el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
+                          <el-dropdown-item command="export" :icon="Download">导出会话</el-dropdown-item>\n<el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
                         </el-dropdown-menu>
                       </template>
                     </el-dropdown>
@@ -945,7 +970,7 @@ const SETTING_ITEMS = [
                                   <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(s.id) ? '取消收藏' : '收藏' }}</el-dropdown-item>
                                   <el-dropdown-item command="back-to-workspace" :icon="Back" divided>返回工作区</el-dropdown-item>
                                   <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
-                                  <el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
+                                  <el-dropdown-item command="export" :icon="Download">导出会话</el-dropdown-item>\n<el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
                                 </el-dropdown-menu>
                               </template>
                             </el-dropdown>
@@ -980,7 +1005,7 @@ const SETTING_ITEMS = [
                                 <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(s.id) ? '取消收藏' : '收藏' }}</el-dropdown-item>
                                 <el-dropdown-item v-if="data.groupMap[s.id]" command="back-to-workspace" :icon="Back" divided>返回工作区</el-dropdown-item>
                                 <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
-                                <el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
+                                <el-dropdown-item command="export" :icon="Download">导出会话</el-dropdown-item>\n<el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
                               </el-dropdown-menu>
                             </template>
                           </el-dropdown>
@@ -1041,6 +1066,7 @@ const SETTING_ITEMS = [
                           <el-dropdown-item command="unarchive" :icon="Back">还原到工作区</el-dropdown-item>
                           <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(a.sessionId) ? '取消收藏' : '收藏' }}</el-dropdown-item>
                           <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
+                          <el-dropdown-item command="export" :icon="Download">导出会话</el-dropdown-item>
                           <el-dropdown-item command="delete" :icon="Delete" divided>删除归档会话</el-dropdown-item>
                         </el-dropdown-menu>
                       </template>

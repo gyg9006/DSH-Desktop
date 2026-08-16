@@ -222,7 +222,8 @@ const api = {
   renameSessionGroup: (id: string, name: string): Promise<SessionOpResult> =>
     ipcRenderer.invoke(IPC.SessionGroupRename, id, name),
   pinSessionGroup: (id: string): Promise<SessionOpResult> => ipcRenderer.invoke(IPC.SessionGroupPin, id),
-  deleteSessionGroup: (id: string): Promise<SessionOpResult> => ipcRenderer.invoke(IPC.SessionGroupDelete, id),
+  deleteSessionGroup: (id: string, deleteContents = false): Promise<SessionOpResult> =>
+    ipcRenderer.invoke(IPC.SessionGroupDelete, id, deleteContents),
   moveSessionToGroup: (sessionId: string, groupId: string | null): Promise<SessionOpResult> =>
     ipcRenderer.invoke(IPC.SessionMoveToGroup, sessionId, groupId),
   setSessionFavorite: (sessionId: string, favorite: boolean): Promise<SessionOpResult> =>
@@ -234,6 +235,12 @@ const api = {
     ipcRenderer.invoke(IPC.SessionArchive, sessionId, title, time),
   deleteArchivedSession: (sessionId: string): Promise<SessionOpResult> =>
     ipcRenderer.invoke(IPC.SessionDeleteArchived, sessionId),
+  deleteArchivedSessions: (sessionIds: string[]): Promise<SessionOpResult> =>
+    ipcRenderer.invoke(IPC.SessionDeleteArchivedBatch, sessionIds),
+  deleteSessions: (sessionIds: string[]): Promise<SessionOpResult> =>
+    ipcRenderer.invoke(IPC.SessionDeleteBatch, sessionIds),
+  unarchiveSession: (sessionId: string): Promise<SessionOpResult> =>
+    ipcRenderer.invoke(IPC.SessionUnarchive, sessionId),
 
   // ---------- M5：备份与恢复 ----------
   createBackup: (): Promise<{ ok: boolean; path?: string; sizeBytes?: number; error?: string }> =>

@@ -59,7 +59,10 @@ import {
   renameSessionRpc,
   forkSessionRpc,
   archiveSession,
-  deleteArchivedSession
+  deleteArchivedSession,
+  deleteArchivedSessions,
+  deleteLiveSessions,
+  unarchiveSession
 } from './sessionOps'
 import {
   createBackup,
@@ -492,8 +495,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SessionGroupPin, (_event, id: string) => {
     return pinSessionGroup(getWorkspaceDir(), String(id ?? ''))
   })
-  ipcMain.handle(IPC.SessionGroupDelete, (_event, id: string) => {
-    return deleteSessionGroup(getWorkspaceDir(), String(id ?? ''))
+  ipcMain.handle(IPC.SessionGroupDelete, (_event, id: string, deleteContents?: boolean) => {
+    return deleteSessionGroup(getWorkspaceDir(), String(id ?? ''), deleteContents === true)
   })
   ipcMain.handle(IPC.SessionMoveToGroup, (_event, sessionId: string, groupId: string | null) => {
     return moveSessionToGroup(getWorkspaceDir(), String(sessionId ?? ''), groupId === null ? null : String(groupId))
@@ -512,6 +515,15 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.SessionDeleteArchived, (_event, sessionId: string) => {
     return deleteArchivedSession(getWorkspaceDir(), String(sessionId ?? ''))
+  })
+  ipcMain.handle(IPC.SessionDeleteArchivedBatch, (_event, sessionIds: string[]) => {
+    return deleteArchivedSessions(getWorkspaceDir(), Array.isArray(sessionIds) ? sessionIds.map(String) : [])
+  })
+  ipcMain.handle(IPC.SessionDeleteBatch, (_event, sessionIds: string[]) => {
+    return deleteLiveSessions(getWorkspaceDir(), Array.isArray(sessionIds) ? sessionIds.map(String) : [])
+  })
+  ipcMain.handle(IPC.SessionUnarchive, (_event, sessionId: string) => {
+    return unarchiveSession(getWorkspaceDir(), String(sessionId ?? ''))
   })
 
   // ---------- M5：备份与恢复（Tab5） ----------

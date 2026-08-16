@@ -26,7 +26,7 @@ interface WorkspaceDoc {
 
 interface RegistryDoc extends WorkspaceDoc {
   unit?: { name?: string; version?: number }
-  global: { initialized: boolean; workspaceIds: string[] }
+  global: { initialized: boolean; workspaceIds: string[]; archivedSessionIds?: string[] }
   tables: { workspaces: Record<string, WorkspaceRecord> }
 }
 
@@ -146,7 +146,7 @@ function writeRegistry(workspaceDir: string, mutate: (doc: RegistryDoc) => void)
   const p = registryPath(workspaceDir)
   let doc: RegistryDoc = {
     unit: { name: 'workspace', version: 2 },
-    global: { initialized: true, workspaceIds: [] },
+    global: { initialized: true, workspaceIds: [], archivedSessionIds: [] },
     tables: { workspaces: {} }
   }
   try {
@@ -156,7 +156,8 @@ function writeRegistry(workspaceDir: string, mutate: (doc: RegistryDoc) => void)
         ...raw,
         global: {
           initialized: true,
-          workspaceIds: Array.isArray(raw.global?.workspaceIds) ? (raw.global.workspaceIds as string[]) : []
+          workspaceIds: Array.isArray(raw.global?.workspaceIds) ? (raw.global.workspaceIds as string[]) : [],
+          archivedSessionIds: Array.isArray(raw.global?.archivedSessionIds) ? (raw.global.archivedSessionIds as string[]) : []
         },
         tables: { workspaces: raw.tables?.workspaces ?? {} }
       }
@@ -167,6 +168,35 @@ function writeRegistry(workspaceDir: string, mutate: (doc: RegistryDoc) => void)
   mutate(doc)
   fs.mkdirSync(path.dirname(p), { recursive: true })
   fs.writeFileSync(p, JSON.stringify(doc, null, 2), 'utf8')
+}
+
+/** 从工作区注册表移除会话（sessionIds + archivedSessionIds），供删除会话时同步 dsh。 */
+export function removeSessionFromRegistry(workspaceDir: string, sessionId: string): void {
+  writeRegistry(workspaceDir, (doc) => {
+    for (const ws of Object.values(doc.tables?.workspaces ?? {})) {
+      if (Array.isArray(ws.sessionIds)) {
+        ws.sessionIds = (ws.sessionIds as string[]).filter((x) => x !== sessionId)
+      }
+    }
+    doc.global.archivedSessionIds = (doc.global.archivedSessionIds ?? []).filter((x) => x !== sessionId)
+  })
+}
+
+/** 取消归档：把会话从 archivedSessionIds 移除（保留在 sessionIds 中，回到原工作区）。 */
+export function unarchiveSessionInRegistry(workspaceDir: string, sessionId: string): void {
+  writeRegistry(workspaceDir, (doc) => {
+    doc.global.archivedSessionIds = (doc.global.archivedSessionIds ?? []).filter((x) => x !== sessionId)
+  })
+}
+
+/** 读取会话所属工作区（id/path），未找到返回 null。 */
+export function findSessionWorkspace(workspaceDir: string, sessionId: string): { id: string; path: string } | null {
+  const { tables } = readRegistry(workspaceDir)
+  for (const [id, rec] of Object.entries(tables)) {
+    const ids = Array.isArray(rec.sessionIds) ? (rec.sessionIds as string[]) : []
+    if (ids.includes(sessionId) && typeof rec.path === 'string') return { id, path: rec.path }
+  }
+  return null
 }
 
 /** 重命名工作区。 */

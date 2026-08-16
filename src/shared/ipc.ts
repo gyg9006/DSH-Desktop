@@ -62,6 +62,9 @@ export const IPC = {
   SessionFork: 'sessions:fork',
   SessionArchive: 'sessions:archive',
   SessionDeleteArchived: 'sessions:delete-archived',
+  SessionDeleteArchivedBatch: 'sessions:delete-archived-batch',
+  SessionDeleteBatch: 'sessions:delete-batch',
+  SessionUnarchive: 'sessions:unarchive',
   BackupCreate: 'backup:create',
   BackupList: 'backup:list',
   BackupRestore: 'backup:restore',
@@ -403,6 +406,10 @@ export interface ArchivedSessionEntry {
   groupId: string | null
   /** 收藏 */
   favorite: boolean
+  /** 归档前所在工作区路径（还原到工作区时使用） */
+  workspacePath?: string
+  /** 归档前所在工作区 id */
+  workspaceId?: string
 }
 
 /** 侧边栏会话视图的完整数据。 */
@@ -420,6 +427,8 @@ export interface SessionOpResult {
   error?: string
   /** fork 产生的新会话 id */
   forkedId?: string
+  /** 批量操作成功数量 */
+  count?: number
 }
 
 export interface BackupEntryPayload {

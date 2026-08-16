@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, ElSelect, ElOption } from 'element-plus'
+import type { ElMessageBoxOptions } from 'element-plus'
 import {
   Plus,
   Setting,
@@ -33,7 +34,8 @@ import {
   CollectionTag,
   Folder,
   Aim,
-  CopyDocument
+  CopyDocument,
+  List
 } from '@element-plus/icons-vue'
 import AppLogo from './AppLogo.vue'
 import { useAppStore } from '../stores/app'
@@ -75,6 +77,131 @@ const archiveTime = ref('')
 const archiveExpanded = ref(true)
 
 const favorites = computed(() => new Set(data.value.favorites))
+
+// ---------- 多选与批量删除 ----------
+/** 多选模式：none=关闭；daily=日常工作；archive=归档 */
+const selectMode = ref<'none' | 'daily' | 'archive'>('none')
+/** 选中的会话 id（daily 或 archive 通用） */
+const selectedIds = ref<Set<string>>(new Set())
+/** 选中的分组 id（仅 daily 分组行） */
+const selectedGroupIds = ref<Set<string>>(new Set())
+
+function enterSelect(mode: 'daily' | 'archive'): void {
+  selectMode.value = mode
+  selectedIds.value = new Set()
+  selectedGroupIds.value = new Set()
+}
+
+function exitSelect(): void {
+  selectMode.value = 'none'
+  selectedIds.value = new Set()
+  selectedGroupIds.value = new Set()
+}
+
+function toggleSelect(id: string): void {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+function toggleGroupSelect(id: string): void {
+  const next = new Set(selectedGroupIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedGroupIds.value = next
+}
+
+/** checkbox change 回调：选中/取消。 */
+function markSelect(id: string, on: boolean): void {
+  const next = new Set(selectedIds.value)
+  if (on) next.add(id)
+  else next.delete(id)
+  selectedIds.value = next
+}
+
+function markGroupSelect(id: string, on: boolean): void {
+  const next = new Set(selectedGroupIds.value)
+  if (on) next.add(id)
+  else next.delete(id)
+  selectedGroupIds.value = next
+}
+
+/** 全选当前可见会话（日常视图：flat 列表或工作区树内全部；归档：过滤后全部）。 */
+function selectAllVisible(): void {
+  if (selectMode.value === 'archive') {
+    selectedIds.value = new Set(filteredArchived.value.map((a) => a.sessionId))
+    return
+  }
+  const ids = new Set<string>()
+  if (viewMode.value.groupBy === 'flat') {
+    for (const s of filterSessions(flatSessions.value)) ids.add(s.id)
+  } else {
+    for (const ws of data.value.workspaces) {
+      for (const s of filterSessions(sortSessions(ws.sessions))) ids.add(s.id)
+    }
+  }
+  selectedIds.value = ids
+}
+
+/** 删除选中会话（日常）或选中归档会话。 */
+async function deleteSelected(): Promise<void> {
+  const ids = [...selectedIds.value]
+  if (ids.length === 0) return
+  const label = selectMode.value === 'archive' ? '归档会话' : '会话'
+  try {
+    await ElMessageBox.confirm(`确定删除选中的 ${ids.length} 个${label}？相关文件将被永久删除。`, `删除${label}`, {
+      type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  const result =
+    selectMode.value === 'archive'
+      ? await window.dshw.deleteArchivedSessions(ids)
+      : await window.dshw.deleteSessions(ids)
+  if (result.ok) {
+    ElMessage.success(`已删除 ${result.count ?? ids.length} 个${label}`)
+    exitSelect()
+    await refreshData()
+  } else {
+    ElMessage.error(result.error ?? '删除失败')
+  }
+}
+
+/** 批量删除选中分组（每组删除前按 includeContents 确认）。 */
+async function deleteSelectedGroups(): Promise<void> {
+  const ids = [...selectedGroupIds.value]
+  if (ids.length === 0) return
+  let includeContents = false
+  try {
+    await ElMessageBox.confirm(`确定删除选中的 ${ids.length} 个分组？`, '删除分组', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      checkboxMessage: '同时删除分组内全部会话（不勾选则会话移回工作文件夹）',
+      checkboxChecked: false,
+      beforeClose: (action, instance, done) => {
+        if (action === 'confirm') {
+          includeContents = (instance as unknown as { checkboxChecked?: boolean }).checkboxChecked === true
+          done()
+        } else {
+          done()
+        }
+      }
+    } as ElMessageBoxOptions)
+  } catch {
+    return
+  }
+  let okCount = 0
+  for (const gid of ids) {
+    const r = await window.dshw.deleteSessionGroup(gid, includeContents)
+    if (r.ok) okCount++
+  }
+  ElMessage.success(okCount > 0 ? `已删除 ${okCount} 个分组` : '没有可删除的分组')
+  exitSelect()
+  await refreshData()
+}
 
 async function refreshData(): Promise<void> {
   data.value = await window.dshw.getSidebarData()
@@ -255,12 +382,23 @@ async function pinGroupItem(g: SessionGroupInfo): Promise<void> {
 
 async function deleteGroupItem(g: SessionGroupInfo): Promise<void> {
   try {
-    await ElMessageBox.confirm(`删除分组「${g.name}」？分组内会话将回到「未分组」。`, '删除分组', {
-      type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
-    })
-    const result = await window.dshw.deleteSessionGroup(g.id)
-    if (result.ok) { ElMessage.success('已删除'); await refreshData() }
-    else ElMessage.error(result.error ?? '删除失败')
+    const res = (await ElMessageBox.confirm(
+      `删除分组「${g.name}」？`,
+      '删除分组',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        checkboxMessage: '同时删除分组内全部会话（不勾选则会话移回工作文件夹）',
+        checkboxChecked: false
+      } as ElMessageBoxOptions
+    )) as unknown as { value?: boolean }
+    const deleteContents = res?.value === true
+    const result = await window.dshw.deleteSessionGroup(g.id, deleteContents)
+    if (result.ok) {
+      ElMessage.success(deleteContents ? `已删除分组及 ${result.count ?? 0} 个会话` : '已删除，会话已移回工作文件夹')
+      await refreshData()
+    } else ElMessage.error(result.error ?? '删除失败')
   } catch { /* 取消 */ }
 }
 
@@ -403,6 +541,31 @@ async function sessionCmd(cmd: string, session: WorkspaceSessionEntry, _groupId:
   if (cmd === 'archive') return archiveSessionItem(session)
   if (cmd === 'favorite') return toggleFavorite(session.id, favorites.value.has(session.id))
   if (cmd === 'move') pickGroup(session.id, session.title)
+  if (cmd === 'back-to-workspace') return backToWorkspace(session)
+  if (cmd === 'delete') return deleteSessionItem(session)
+}
+
+/** 返回工作区：移出分组（回到未分组）。 */
+async function backToWorkspace(session: WorkspaceSessionEntry): Promise<void> {
+  const result = await window.dshw.moveSessionToGroup(session.id, null)
+  if (result.ok) {
+    ElMessage.success(`「${session.title}」已移回工作文件夹`)
+    await refreshData()
+  } else ElMessage.error(result.error ?? '操作失败')
+}
+
+/** 删除未归档会话（单条，带确认）。 */
+async function deleteSessionItem(session: WorkspaceSessionEntry): Promise<void> {
+  try {
+    await ElMessageBox.confirm(`删除会话「${session.title}」？相关文件将被永久删除。`, '删除会话', {
+      type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  const result = await window.dshw.deleteSessions([session.id])
+  if (result.ok) { ElMessage.success('已删除'); await refreshData() }
+  else ElMessage.error(result.error ?? '删除失败')
 }
 
 /** 归档会话右键菜单命令。 */
@@ -410,6 +573,16 @@ async function archiveCmd(cmd: string, a: ArchivedSessionEntry): Promise<void> {
   if (cmd === 'favorite') return toggleFavorite(a.sessionId, favorites.value.has(a.sessionId))
   if (cmd === 'delete') return deleteArchivedItem(a)
   if (cmd === 'move') pickGroup(a.sessionId, a.title)
+  if (cmd === 'unarchive') return unarchiveItem(a)
+}
+
+/** 还原到工作区（取消归档）。 */
+async function unarchiveItem(a: ArchivedSessionEntry): Promise<void> {
+  const result = await window.dshw.unarchiveSession(a.sessionId)
+  if (result.ok) {
+    ElMessage.success(`「${a.title}」已还原到工作区`)
+    await refreshData()
+  } else ElMessage.error(result.error ?? '还原失败')
 }
 
 // ---------- 归档搜索 ----------
@@ -556,6 +729,18 @@ const SETTING_ITEMS = [
                   </el-button>
                 </el-tooltip>
                 <div class="mx-1 h-4 w-px bg-gray-200 dark:bg-[#2A2E35]"></div>
+                <!-- 多选模式 -->
+                <el-tooltip content="多选（批量删除）" placement="right">
+                  <el-button
+                    text
+                    circle
+                    aria-label="多选"
+                    :class="{ 'text-brand': selectMode === 'daily' }"
+                    @click="selectMode === 'daily' ? exitSelect() : enterSelect('daily')"
+                  >
+                    <el-icon :size="16"><List /></el-icon>
+                  </el-button>
+                </el-tooltip>
                 <!-- 视图选项（对桌面侧边栏生效 + 同步 dsh） -->
                 <el-dropdown
                   trigger="click"
@@ -587,6 +772,17 @@ const SETTING_ITEMS = [
               <!-- 搜索框（桌面端过滤） -->
               <div v-if="searchOpen" class="mb-2 shrink-0">
                 <el-input v-model="searchText" size="small" placeholder="搜索会话标题…" clearable autofocus />
+              </div>
+
+              <!-- 多选操作条 -->
+              <div v-if="selectMode === 'daily'" class="mb-2 flex shrink-0 items-center gap-1 rounded-lg border border-brand/30 bg-brand/5 p-1.5 dark:border-brand/40 dark:bg-brand/10">
+                <span class="min-w-0 flex-1 truncate pl-1 text-[11px] text-gray-600 dark:text-gray-300">
+                  {{ selectedIds.size + selectedGroupIds.size }} 项已选
+                </span>
+                <el-button size="small" text @click="selectAllVisible()">全选</el-button>
+                <el-button size="small" text type="danger" :disabled="selectedIds.size === 0" @click="deleteSelected()">删除会话</el-button>
+                <el-button size="small" text type="danger" :disabled="selectedGroupIds.size === 0" @click="deleteSelectedGroups()">删除分组</el-button>
+                <el-button size="small" text @click="exitSelect()">退出</el-button>
               </div>
 
               <!-- 服务状态 -->
@@ -627,9 +823,18 @@ const SETTING_ITEMS = [
                     v-for="s in filterSessions(flatSessions)"
                     :key="s.id"
                     class="group flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-[#1D2026] dark:hover:text-gray-200"
-                    title="点击打开会话"
-                    @click="openSession(s)"
+                    :class="{ 'bg-brand/10 dark:bg-brand/15': selectedIds.has(s.id) }"
+                    :title="selectMode === 'daily' ? '点击勾选' : '点击打开会话'"
+                    @click="selectMode === 'daily' ? toggleSelect(s.id) : openSession(s)"
                   >
+                    <el-checkbox
+                      v-if="selectMode === 'daily'"
+                      :model-value="selectedIds.has(s.id)"
+                      size="small"
+                      class="!mr-0 shrink-0"
+                      @click.stop
+                      @change="(v: boolean) => markSelect(s.id, v)"
+                    />
                     <el-icon v-if="favorites.has(s.id)" :size="12" class="shrink-0 text-yellow-400"><StarFilled /></el-icon>
                     <el-icon v-else :size="12" class="shrink-0 text-gray-300 dark:text-gray-600"><ChatDotRound /></el-icon>
                     <span class="min-w-0 flex-1 truncate">{{ s.title }}</span>
@@ -644,7 +849,9 @@ const SETTING_ITEMS = [
                           <el-dropdown-item command="fork" :icon="CopyDocument">分叉会话</el-dropdown-item>
                           <el-dropdown-item command="archive" :icon="Folder">归档会话</el-dropdown-item>
                           <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(s.id) ? '取消收藏' : '收藏' }}</el-dropdown-item>
-                          <el-dropdown-item command="move" :icon="CollectionTag" divided>移动到分组…</el-dropdown-item>
+                          <el-dropdown-item v-if="data.groupMap[s.id]" command="back-to-workspace" :icon="Back" divided>返回工作区</el-dropdown-item>
+                          <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
+                          <el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
                         </el-dropdown-menu>
                       </template>
                     </el-dropdown>
@@ -682,8 +889,16 @@ const SETTING_ITEMS = [
                     <div v-if="isWsExpanded(ws.id)" class="ml-3 space-y-0.5 border-l border-gray-100 pl-2 dark:border-[#23262C]">
                       <!-- 分组 -->
                       <div v-for="g in groupsOf(ws)" :key="g.id" class="rounded-md">
-                        <div class="group flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 hover:bg-gray-50 dark:hover:bg-[#1D2026]" @click="toggleSet(expandedGroups, g.id)">
-                          <el-icon :size="12" class="shrink-0 text-gray-400 dark:text-gray-500">
+                        <div class="group flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 hover:bg-gray-50 dark:hover:bg-[#1D2026]" :class="{ 'bg-brand/10 dark:bg-brand/15': selectedGroupIds.has(g.id) }" @click="selectMode === 'daily' ? toggleGroupSelect(g.id) : toggleSet(expandedGroups, g.id)">
+                          <el-checkbox
+                            v-if="selectMode === 'daily'"
+                            :model-value="selectedGroupIds.has(g.id)"
+                            size="small"
+                            class="!mr-0 shrink-0"
+                            @click.stop
+                            @change="(v: boolean) => markGroupSelect(g.id, v)"
+                          />
+                          <el-icon :size="12" class="shrink-0 text-gray-400 dark:text-gray-500" @click.stop="toggleSet(expandedGroups, g.id)">
                             <ArrowDownIcon v-if="isGroupExpanded(g.id)" /><ArrowRight v-else />
                           </el-icon>
                           <el-icon :size="13" class="shrink-0" :class="g.pinned ? 'text-brand' : 'text-gray-400 dark:text-gray-500'"><Folder /></el-icon>
@@ -704,7 +919,15 @@ const SETTING_ITEMS = [
                           </el-dropdown>
                         </div>
                         <div v-if="isGroupExpanded(g.id)" class="ml-3 space-y-0.5 border-l border-gray-100 pl-2 dark:border-[#23262C]">
-                          <div v-for="s in filterSessions(sortSessions(ws.sessions.filter((x) => belongsTo(x.id, g.id))))" :key="s.id" class="group flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-[#1D2026] dark:hover:text-gray-200" title="点击打开会话" @click="openSession(s)">
+                          <div v-for="s in filterSessions(sortSessions(ws.sessions.filter((x) => belongsTo(x.id, g.id))))" :key="s.id" class="group flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-[#1D2026] dark:hover:text-gray-200" :class="{ 'bg-brand/10 dark:bg-brand/15': selectedIds.has(s.id) }" :title="selectMode === 'daily' ? '点击勾选' : '点击打开会话'" @click="selectMode === 'daily' ? toggleSelect(s.id) : openSession(s)">
+                            <el-checkbox
+                              v-if="selectMode === 'daily'"
+                              :model-value="selectedIds.has(s.id)"
+                              size="small"
+                              class="!mr-0 shrink-0"
+                              @click.stop
+                              @change="(v: boolean) => markSelect(s.id, v)"
+                            />
                             <el-icon v-if="favorites.has(s.id)" :size="12" class="shrink-0 text-yellow-400"><StarFilled /></el-icon>
                             <el-icon v-else :size="12" class="shrink-0 text-gray-300 dark:text-gray-600"><ChatDotRound /></el-icon>
                             <span class="min-w-0 flex-1 truncate">{{ s.title }}</span>
@@ -718,7 +941,9 @@ const SETTING_ITEMS = [
                                   <el-dropdown-item command="fork" :icon="CopyDocument">分叉会话</el-dropdown-item>
                                   <el-dropdown-item command="archive" :icon="Folder">归档会话</el-dropdown-item>
                                   <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(s.id) ? '取消收藏' : '收藏' }}</el-dropdown-item>
-                                  <el-dropdown-item command="move" :icon="CollectionTag" divided>移动到分组…</el-dropdown-item>
+                                  <el-dropdown-item command="back-to-workspace" :icon="Back" divided>返回工作区</el-dropdown-item>
+                                  <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
+                                  <el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
                                 </el-dropdown-menu>
                               </template>
                             </el-dropdown>
@@ -729,7 +954,15 @@ const SETTING_ITEMS = [
 
                       <!-- 未分组 -->
                       <div v-if="ungroupedSessions(ws).length > 0 || groupsOf(ws).length === 0" class="rounded-md">
-                        <div v-for="s in filterSessions(sortSessions(ungroupedSessions(ws)))" :key="s.id" class="group flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-[#1D2026] dark:hover:text-gray-200" title="点击打开会话" @click="openSession(s)">
+                        <div v-for="s in filterSessions(sortSessions(ungroupedSessions(ws)))" :key="s.id" class="group flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-[#1D2026] dark:hover:text-gray-200" :class="{ 'bg-brand/10 dark:bg-brand/15': selectedIds.has(s.id) }" :title="selectMode === 'daily' ? '点击勾选' : '点击打开会话'" @click="selectMode === 'daily' ? toggleSelect(s.id) : openSession(s)">
+                          <el-checkbox
+                            v-if="selectMode === 'daily'"
+                            :model-value="selectedIds.has(s.id)"
+                            size="small"
+                            class="!mr-0 shrink-0"
+                            @click.stop
+                            @change="(v: boolean) => markSelect(s.id, v)"
+                          />
                           <el-icon v-if="favorites.has(s.id)" :size="12" class="shrink-0 text-yellow-400"><StarFilled /></el-icon>
                           <el-icon v-else :size="12" class="shrink-0 text-gray-300 dark:text-gray-600"><ChatDotRound /></el-icon>
                           <span class="min-w-0 flex-1 truncate">{{ s.title }}</span>
@@ -743,7 +976,9 @@ const SETTING_ITEMS = [
                                 <el-dropdown-item command="fork" :icon="CopyDocument">分叉会话</el-dropdown-item>
                                 <el-dropdown-item command="archive" :icon="Folder">归档会话</el-dropdown-item>
                                 <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(s.id) ? '取消收藏' : '收藏' }}</el-dropdown-item>
-                                <el-dropdown-item command="move" :icon="CollectionTag" divided>移动到分组…</el-dropdown-item>
+                                <el-dropdown-item v-if="data.groupMap[s.id]" command="back-to-workspace" :icon="Back" divided>返回工作区</el-dropdown-item>
+                                <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
+                                <el-dropdown-item command="delete" :icon="Delete" divided>删除会话</el-dropdown-item>
                               </el-dropdown-menu>
                             </template>
                           </el-dropdown>
@@ -759,43 +994,64 @@ const SETTING_ITEMS = [
 
           <!-- ===== 归档 ===== -->
           <template v-else>
-            <div class="min-h-0 flex-1 space-y-1 overflow-y-auto">
+            <div class="flex min-h-0 flex-1 flex-col">
               <div class="flex items-center gap-1 px-1 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-600">
                 <el-icon :size="12"><Folder /></el-icon>
                 <span>归档会话</span>
                 <span class="ml-auto text-[10px] text-gray-300 dark:text-gray-600">{{ filteredArchived.length }} / {{ data.archived.length }}</span>
+                <el-tooltip content="多选（批量删除）" placement="right">
+                  <el-button text circle size="small" aria-label="多选" :class="{ 'text-brand': selectMode === 'archive' }" @click="selectMode === 'archive' ? exitSelect() : enterSelect('archive')">
+                    <el-icon :size="14"><List /></el-icon>
+                  </el-button>
+                </el-tooltip>
               </div>
-              <div class="flex items-center gap-1">
+              <div v-if="selectMode === 'archive'" class="mb-1 flex items-center gap-1 rounded-lg border border-brand/30 bg-brand/5 p-1.5 dark:border-brand/40 dark:bg-brand/10">
+                <span class="min-w-0 flex-1 truncate pl-1 text-[11px] text-gray-600 dark:text-gray-300">{{ selectedIds.size }} 项已选</span>
+                <el-button size="small" text @click="selectAllVisible()">全选</el-button>
+                <el-button size="small" text type="danger" :disabled="selectedIds.size === 0" @click="deleteSelected()">删除</el-button>
+                <el-button size="small" text @click="exitSelect()">退出</el-button>
+              </div>
+              <div class="shrink-0">
                 <el-input v-model="archiveKeyword" size="small" placeholder="按关键词搜索…" clearable />
               </div>
-              <div class="flex items-center gap-1">
+              <div class="mt-1 shrink-0">
                 <el-input v-model="archiveTime" size="small" placeholder="按时间搜索：2026 / 2026-08 / 2026-08-16" clearable />
               </div>
-              <div v-for="a in filteredArchived" :key="a.sessionId" class="group rounded-md border border-gray-100 p-1.5 dark:border-[#23262C]">
-                <div class="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-                  <el-icon v-if="favorites.has(a.sessionId)" :size="12" class="shrink-0 text-yellow-400"><StarFilled /></el-icon>
-                  <el-icon v-else :size="12" class="shrink-0 text-gray-300 dark:text-gray-600"><Folder /></el-icon>
-                  <span class="min-w-0 flex-1 truncate" :title="a.title">{{ a.title }}</span>
-                  <el-dropdown trigger="click" @command="(cmd: string) => archiveCmd(cmd, a)" @click.stop>
-                    <el-button text circle size="small" class="!m-0 opacity-0 group-hover:opacity-100" aria-label="归档会话操作">
-                      <el-icon :size="13"><MoreFilled /></el-icon>
-                    </el-button>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(a.sessionId) ? '取消收藏' : '收藏' }}</el-dropdown-item>
-                        <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
-                        <el-dropdown-item command="delete" :icon="Delete" divided>删除归档会话</el-dropdown-item>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
+              <div class="mt-1 min-h-0 flex-1 space-y-1 overflow-y-auto">
+                <div v-for="a in filteredArchived" :key="a.sessionId" class="group rounded-md border border-gray-100 p-1.5 dark:border-[#23262C]" :class="{ 'bg-brand/10 dark:bg-brand/15': selectedIds.has(a.sessionId) }">
+                  <div class="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                    <el-checkbox
+                      v-if="selectMode === 'archive'"
+                      :model-value="selectedIds.has(a.sessionId)"
+                      size="small"
+                      class="!mr-0 shrink-0"
+                      @change="(v: boolean) => markSelect(a.sessionId, v)"
+                    />
+                    <el-icon v-if="favorites.has(a.sessionId)" :size="12" class="shrink-0 text-yellow-400"><StarFilled /></el-icon>
+                    <el-icon v-else :size="12" class="shrink-0 text-gray-300 dark:text-gray-600"><Folder /></el-icon>
+                    <span class="min-w-0 flex-1 truncate" :title="a.title">{{ a.title }}</span>
+                    <el-dropdown trigger="click" @command="(cmd: string) => archiveCmd(cmd, a)" @click.stop>
+                      <el-button text circle size="small" class="!m-0 opacity-0 group-hover:opacity-100" aria-label="归档会话操作">
+                        <el-icon :size="13"><MoreFilled /></el-icon>
+                      </el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="unarchive" :icon="Back">还原到工作区</el-dropdown-item>
+                          <el-dropdown-item command="favorite" :icon="Star">{{ favorites.has(a.sessionId) ? '取消收藏' : '收藏' }}</el-dropdown-item>
+                          <el-dropdown-item command="move" :icon="CollectionTag">移动到分组…</el-dropdown-item>
+                          <el-dropdown-item command="delete" :icon="Delete" divided>删除归档会话</el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </div>
+                  <div class="mt-1 flex flex-wrap items-center gap-1 pl-4">
+                    <span class="rounded bg-gray-100 px-1 py-0.5 text-[9px] text-gray-400 dark:bg-[#1E2126] dark:text-gray-500">{{ fmtDate(a.time) }}</span>
+                    <span v-for="k in a.keywords.slice(0, 3)" :key="k" class="rounded bg-gray-100 px-1 py-0.5 text-[9px] text-gray-400 dark:bg-[#1E2126] dark:text-gray-500">#{{ k }}</span>
+                  </div>
                 </div>
-                <div class="mt-1 flex flex-wrap items-center gap-1 pl-4">
-                  <span class="rounded bg-gray-100 px-1 py-0.5 text-[9px] text-gray-400 dark:bg-[#1E2126] dark:text-gray-500">{{ fmtDate(a.time) }}</span>
-                  <span v-for="k in a.keywords.slice(0, 3)" :key="k" class="rounded bg-gray-100 px-1 py-0.5 text-[9px] text-gray-400 dark:bg-[#1E2126] dark:text-gray-500">#{{ k }}</span>
+                <div v-if="filteredArchived.length === 0" class="px-2 py-3 text-center text-[10px] text-gray-400 dark:text-gray-600">
+                  {{ data.archived.length === 0 ? '暂无归档会话' : '没有匹配的结果' }}
                 </div>
-              </div>
-              <div v-if="filteredArchived.length === 0" class="px-2 py-3 text-center text-[10px] text-gray-400 dark:text-gray-600">
-                {{ data.archived.length === 0 ? '暂无归档会话' : '没有匹配的结果' }}
               </div>
             </div>
           </template>

@@ -12,6 +12,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { readJsonFile, writeJsonAtomic } from '../shared/workspace'
 import { logger } from './logger'
+import { removeSessionFromRegistry, unarchiveSessionInRegistry, findSessionWorkspace } from './workspaces'
 import type { ArchivedSessionEntry, SessionGroupInfo, SessionOpResult } from '../shared/ipc'
 
 // ---------------------------------------------------------------------------
@@ -76,14 +77,21 @@ export function pinSessionGroup(workspaceDir: string, groupId: string): SessionO
   return { ok: true }
 }
 
-export function deleteSessionGroup(workspaceDir: string, groupId: string): SessionOpResult {
+export function deleteSessionGroup(workspaceDir: string, groupId: string, deleteContents = false): SessionOpResult {
   const doc = readGroupsDoc(workspaceDir)
+  const g = doc.groups.find((x) => x.id === groupId)
+  if (!g) return { ok: false, error: '分组不存在' }
+  const memberIds = Object.entries(doc.map).filter(([, gid]) => gid === groupId).map(([sid]) => sid)
   doc.groups = doc.groups.filter((x) => x.id !== groupId)
   for (const [sid, gid] of Object.entries(doc.map)) {
     if (gid === groupId) delete doc.map[sid]
   }
   writeGroupsDoc(workspaceDir, doc)
-  return { ok: true }
+  if (deleteContents && memberIds.length > 0) {
+    const res = deleteLiveSessions(workspaceDir, memberIds)
+    if (!res.ok) return { ok: false, error: `分组已删除，但删除会话失败：${res.error ?? ''}` }
+  }
+  return { ok: true, count: memberIds.length }
 }
 
 /** 会话所在分组 id（无则 null）。 */
@@ -137,7 +145,6 @@ interface ArchivedIndexDoc {
   /** sessionId → 条目 */
   entries: Record<string, Omit<ArchivedSessionEntry, 'favorite' | 'sessionId'>>
 }
-
 function archivedIndexPath(workspaceDir: string): string {
   return path.join(workspaceDir, 'config', 'archived-index.json')
 }
@@ -215,13 +222,16 @@ export async function archiveSession(workspaceDir: string, sessionId: string, ti
     if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true })
     fs.renameSync(src, dest)
 
+    const ws = findSessionWorkspace(workspaceDir, sessionId)
     const index = readArchivedIndex(workspaceDir)
     index.entries[sessionId] = {
       title: title || sessionId,
       time,
       archivedAt: Date.now(),
       keywords: extractKeywords(title),
-      groupId: sessionGroupOf(workspaceDir, sessionId)
+      groupId: sessionGroupOf(workspaceDir, sessionId),
+      workspacePath: ws?.path,
+      workspaceId: ws?.id
     }
     writeArchivedIndex(workspaceDir, index)
     logger.info(`会话 ${sessionId} 已归档到 ${dest}`)
@@ -233,7 +243,41 @@ export async function archiveSession(workspaceDir: string, sessionId: string, ti
   }
 }
 
-/** 删除归档会话（目录 + 索引 + 分组映射）。 */
+/** 取消归档：把会话目录移回原工作区，并从归档索引与 dsh 归档集移除。 */
+export function unarchiveSession(workspaceDir: string, sessionId: string): SessionOpResult {
+  try {
+    const dir = findSessionDir(workspaceDir, sessionId)
+    if (!dir || !dir.includes(path.join('archived'))) return { ok: false, error: '未找到归档会话目录' }
+    const index = readArchivedIndex(workspaceDir)
+    const entry = index.entries[sessionId]
+    const workspacePath = entry?.workspacePath
+
+    // 目标目录：原工作区路径转义组名；无记录时回退到当前工作区组
+    let groupName: string
+    if (typeof workspacePath === 'string' && workspacePath.trim()) {
+      groupName = workspacePath.replace(/[\\/:*?"<>|]/g, '-')
+    } else {
+      const ws = findSessionWorkspace(workspaceDir, sessionId)
+      groupName = ws ? ws.path.replace(/[\\/:*?"<>|]/g, '-') : 'restored'
+    }
+    const sessionsRoot = path.join(workspaceDir, 'data', 'sessions')
+    const destDir = path.join(sessionsRoot, groupName, sessionId)
+    fs.mkdirSync(path.dirname(destDir), { recursive: true })
+    if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true })
+    fs.renameSync(dir, destDir)
+
+    delete index.entries[sessionId]
+    writeArchivedIndex(workspaceDir, index)
+    // dsh registry：从 archivedSessionIds 移除（会话保留在 sessionIds 中）
+    unarchiveSessionInRegistry(workspaceDir, sessionId)
+    logger.info(`会话 ${sessionId} 已还原到工作区`)
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: `还原失败：${error instanceof Error ? error.message : String(error)}` }
+  }
+}
+
+/** 删除归档会话（目录 + 索引 + 分组映射 + dsh registry）。 */
 export function deleteArchivedSession(workspaceDir: string, sessionId: string): SessionOpResult {
   try {
     const dir = findSessionDir(workspaceDir, sessionId)
@@ -244,10 +288,54 @@ export function deleteArchivedSession(workspaceDir: string, sessionId: string): 
     const groups = readGroupsDoc(workspaceDir)
     delete groups.map[sessionId]
     writeGroupsDoc(workspaceDir, groups)
+    removeSessionFromRegistry(workspaceDir, sessionId)
     return { ok: true }
   } catch (error) {
     return { ok: false, error: `删除失败：${error instanceof Error ? error.message : String(error)}` }
   }
+}
+
+/** 批量删除归档会话。 */
+export function deleteArchivedSessions(workspaceDir: string, sessionIds: string[]): SessionOpResult {
+  let okCount = 0
+  let firstError: string | undefined
+  for (const id of sessionIds) {
+    const r = deleteArchivedSession(workspaceDir, id)
+    if (r.ok) okCount++
+    else if (!firstError) firstError = r.error
+  }
+  return okCount > 0 ? { ok: true, count: okCount } : { ok: false, error: firstError ?? '没有可删除的归档会话' }
+}
+
+/** 删除未归档会话（目录 + 分组映射 + 收藏 + dsh registry）。 */
+export function deleteLiveSession(workspaceDir: string, sessionId: string): SessionOpResult {
+  try {
+    const dir = findSessionDir(workspaceDir, sessionId)
+    if (dir && !dir.includes(path.join('archived'))) fs.rmSync(dir, { recursive: true, force: true })
+    const groups = readGroupsDoc(workspaceDir)
+    delete groups.map[sessionId]
+    writeGroupsDoc(workspaceDir, groups)
+    const favorites = readFavorites(workspaceDir)
+    if (favorites.includes(sessionId)) {
+      writeJsonAtomic(favoritesPath(workspaceDir), { favorites: favorites.filter((x) => x !== sessionId) })
+    }
+    removeSessionFromRegistry(workspaceDir, sessionId)
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: `删除失败：${error instanceof Error ? error.message : String(error)}` }
+  }
+}
+
+/** 批量删除未归档会话。 */
+export function deleteLiveSessions(workspaceDir: string, sessionIds: string[]): SessionOpResult {
+  let okCount = 0
+  let firstError: string | undefined
+  for (const id of sessionIds) {
+    const r = deleteLiveSession(workspaceDir, id)
+    if (r.ok) okCount++
+    else if (!firstError) firstError = r.error
+  }
+  return okCount > 0 ? { ok: true, count: okCount } : { ok: false, error: firstError ?? '没有可删除的会话' }
 }
 
 /** 归档列表（含收藏标记）。 */

@@ -10,6 +10,7 @@ import { AgentMgr } from './components/views/AgentMgr'
 import { KnowledgeBase } from './components/views/KnowledgeBase'
 import { SkillMgr } from './components/views/SkillMgr'
 import { Settings } from './components/views/Settings'
+import { useTheme } from './hooks/useTheme'
 
 /**
  * DSH Desktop v2.0 应用外壳：
@@ -17,6 +18,7 @@ import { Settings } from './components/views/Settings'
  */
 export default function App(): JSX.Element {
   const [view, setView] = useState<ViewKey>('workbench')
+  useTheme() // 应用持久化主题（dark class）
 
   const renderView = (): JSX.Element => {
     switch (view) {

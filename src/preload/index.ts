@@ -56,6 +56,11 @@ import type {
   KnowledgePipelineResult,
   KnowledgePipelineProgress,
   RecentSessionTextResult,
+  ModelsViewPayload,
+  ModelsProviderSetInput,
+  ModelsCustomUpsertInput,
+  ModelsTestInput,
+  ModelsTestResult,
   AgentsPayload,
   AgentImportResult,
   AgentRunResult,
@@ -375,6 +380,28 @@ const api = {
   /** 读取最近会话文本（供「提炼会话」自动填充）。 */
   getRecentSessionText: (maxChars?: number): Promise<RecentSessionTextResult> =>
     ipcRenderer.invoke(IPC.SessionGetRecentText, maxChars),
+
+  // ===== v2.0：全局行为规则 =====
+  getGlobalRules: (): Promise<{ ok: boolean; path: string; content: string }> => ipcRenderer.invoke(IPC.RulesGet),
+  saveGlobalRules: (content: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.RulesSave, content),
+
+  // ===== v2.0：全域模型对接中心 =====
+  modelsGet: (): Promise<ModelsViewPayload> => ipcRenderer.invoke(IPC.ModelsGet),
+  modelsProviderSet: (input: ModelsProviderSetInput): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.ModelsProviderSet, input),
+  modelsCustomUpsert: (input: ModelsCustomUpsertInput): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.ModelsCustomUpsert, input),
+  modelsCustomDelete: (id: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.ModelsCustomDelete, id),
+  modelsKeySave: (providerId: string, key: string): Promise<{ ok: boolean; mask?: string; error?: string }> =>
+    ipcRenderer.invoke(IPC.ModelsKeySave, providerId, key),
+  modelsKeyDelete: (providerId: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.ModelsKeyDelete, providerId),
+  modelsTest: (input: ModelsTestInput): Promise<ModelsTestResult> => ipcRenderer.invoke(IPC.ModelsTest, input),
+  modelsList: (input: ModelsTestInput): Promise<{ ok: boolean; models?: string[]; error?: string }> =>
+    ipcRenderer.invoke(IPC.ModelsList, input),
+  modelsMigrateLegacy: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke(IPC.ModelsMigrateLegacy),
 
   // ===== v2.0：Agent 管理 =====
   agentsGet: (): Promise<AgentsPayload> => ipcRenderer.invoke(IPC.AgentsGet),

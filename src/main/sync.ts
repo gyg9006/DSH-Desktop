@@ -1,8 +1,13 @@
 /**
- * 异地同步（需求：A/B 两台 PC 之间同步会话，丝滑切换工作）。
+ * 异地同步（需求：A/B 两台 PC 之间同步，丝滑切换工作）。
  * 机制：基于便携 Git（runtime/git）管理 workspace/sync 仓库；
- * 同步内容：会话（data/sessions）与会话元数据（storages/session_projcache.json）。
- * 凭据（.credentials.yaml、api.json）等敏感文件绝不同步。
+ * 同步内容（镜像整工作区数据，技能与插件随同步可用）：
+ *   - data/sessions、data/storages、data/archived（会话与元数据）
+ *   - data/profiles（插件依赖，换机后插件可用）
+ *   - skills/（技能）
+ *   - data/knowledge.json、data/agents.json（知识库 / Agent）
+ *   - config 关键配置（app.json / session-groups / favorites / sync.json）
+ * 凭据（.credentials.yaml、api.json、config/electron-userdata）绝不同步。
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -52,35 +57,9 @@ export function writeSyncConfig(patch: Partial<SyncConfig>): SyncConfig {
   return next
 }
 
-/** 复制目录：仅复制缺失或源较新的文件（会话为 append-only，避免覆盖本地更新）。 */
-function syncTree(srcRoot: string, destRoot: string): number {
-  if (!fs.existsSync(srcRoot)) return 0
-  fs.mkdirSync(destRoot, { recursive: true })
-  let copied = 0
-  for (const entry of fs.readdirSync(srcRoot, { withFileTypes: true })) {
-    const src = path.join(srcRoot, entry.name)
-    const dest = path.join(destRoot, entry.name)
-    if (entry.isDirectory()) {
-      copied += syncTree(src, dest)
-    } else if (entry.isFile()) {
-      const srcStat = fs.statSync(src)
-      let needCopy = !fs.existsSync(dest)
-      if (!needCopy) {
-        const destStat = fs.statSync(dest)
-        needCopy = srcStat.mtimeMs > destStat.mtimeMs + 1000
-      }
-      if (needCopy) {
-        fs.copyFileSync(src, dest)
-        copied += 1
-      }
-    }
-  }
-  return copied
-}
-
 /**
  * 按会话 id 对齐删除：把 destRoot（镜像侧）中「源侧已不存在」的会话目录删掉，
- * 保证删除操作能经 git 传播（否则 syncTree 只增不删，已删会话会在下次拉取时复活）。
+ * 保证删除操作能经 git 传播。
  * 结构：<root>/<projectKey>/<sessionId>/。
  */
 export function pruneMissing(srcRoot: string, destRoot: string): number {
@@ -108,36 +87,79 @@ export function pruneMissing(srcRoot: string, destRoot: string): number {
   return removed
 }
 
-/** 把本地会话同步到 sync 仓库工作区（复制 + 删除对齐，使删除可传播）。 */
-function prepareLocal(workspaceDir: string): number {
-  const syncDir = getSyncDir(workspaceDir)
-  fs.mkdirSync(syncDir, { recursive: true })
-  const sessionsSrc = path.join(workspaceDir, 'data', 'sessions')
-  const sessionsDest = path.join(syncDir, 'sessions')
-  const copied = syncTree(sessionsSrc, sessionsDest)
-  // 本地已删除的会话也从镜像侧删除（git add -A 才会记录删除）
-  pruneMissing(sessionsSrc, sessionsDest)
-  // 会话元数据（projcache）作为同步副本
-  const projSrc = path.join(workspaceDir, 'data', 'storages', 'session_projcache.json')
-  if (fs.existsSync(projSrc)) {
-    fs.copyFileSync(projSrc, path.join(syncDir, 'session_projcache.json'))
+/** 同步镜像目录清单（相对 workspace）：skills/plugins 换机后直接可用。 */
+const SYNC_DIRS = ['data/sessions', 'data/storages', 'data/archived', 'data/profiles', 'skills'] as const
+
+/** 同步镜像文件清单（相对 workspace；凭据/大目录除外）。 */
+const SYNC_FILES = [
+  'data/knowledge.json',
+  'data/agents.json',
+  'config/app.json',
+  'config/session-groups.json',
+  'config/session-favorites.json',
+  'config/sync.json'
+] as const
+
+/** 通用目录镜像：复制 + 删除对齐（删除可经 git 传播）。 */
+function mirrorDir(srcDir: string, destDir: string): number {
+  if (!fs.existsSync(srcDir)) return 0
+  fs.mkdirSync(destDir, { recursive: true })
+  let copied = 0
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    const s = path.join(srcDir, entry.name)
+    const d = path.join(destDir, entry.name)
+    if (entry.isDirectory()) {
+      copied += mirrorDir(s, d)
+    } else if (entry.isFile()) {
+      fs.mkdirSync(path.dirname(d), { recursive: true })
+      fs.copyFileSync(s, d)
+      copied++
+    }
+  }
+  // 删除对齐：dest 有而 src 无的条目删除
+  for (const entry of fs.readdirSync(destDir, { withFileTypes: true })) {
+    if (!fs.existsSync(path.join(srcDir, entry.name))) {
+      fs.rmSync(path.join(destDir, entry.name), { recursive: true, force: true })
+    }
   }
   return copied
 }
 
-/** 把远端（sync 仓库）内容合并回本地 data/sessions（复制 + 删除对齐）。 */
-function applyRemote(workspaceDir: string): number {
+/** 把本地工作区同步到 sync 仓库工作区（复制 + 删除对齐，使删除可传播）。 */
+export function prepareLocal(workspaceDir: string): number {
   const syncDir = getSyncDir(workspaceDir)
-  const sessionsSrc = path.join(syncDir, 'sessions')
-  const sessionsDest = path.join(workspaceDir, 'data', 'sessions')
-  const copied = syncTree(sessionsSrc, sessionsDest)
-  // 远端已删除的会话也从本地删除（避免已删会话复活）
-  pruneMissing(sessionsSrc, sessionsDest)
-  const projFile = path.join(syncDir, 'session_projcache.json')
-  if (fs.existsSync(projFile)) {
-    const destDir = path.join(workspaceDir, 'data', 'storages')
-    fs.mkdirSync(destDir, { recursive: true })
-    fs.copyFileSync(projFile, path.join(destDir, 'session_projcache.json'))
+  fs.mkdirSync(syncDir, { recursive: true })
+  let copied = 0
+  for (const rel of SYNC_DIRS) {
+    copied += mirrorDir(path.join(workspaceDir, rel), path.join(syncDir, rel))
+  }
+  for (const rel of SYNC_FILES) {
+    const src = path.join(workspaceDir, rel)
+    if (fs.existsSync(src)) {
+      const dest = path.join(syncDir, rel)
+      fs.mkdirSync(path.dirname(dest), { recursive: true })
+      fs.copyFileSync(src, dest)
+      copied++
+    }
+  }
+  return copied
+}
+
+/** 把远端（sync 仓库）内容合并回本地（复制 + 删除对齐）。 */
+export function applyRemote(workspaceDir: string): number {
+  const syncDir = getSyncDir(workspaceDir)
+  let copied = 0
+  for (const rel of SYNC_DIRS) {
+    copied += mirrorDir(path.join(syncDir, rel), path.join(workspaceDir, rel))
+  }
+  for (const rel of SYNC_FILES) {
+    const src = path.join(syncDir, rel)
+    if (fs.existsSync(src)) {
+      const dest = path.join(workspaceDir, rel)
+      fs.mkdirSync(path.dirname(dest), { recursive: true })
+      fs.copyFileSync(src, dest)
+      copied++
+    }
   }
   return copied
 }

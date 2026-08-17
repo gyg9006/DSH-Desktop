@@ -114,6 +114,18 @@ export const IPC = {
   KnowledgeExtractPipeline: 'knowledge:extract-pipeline',
   KnowledgeExtractProgress: 'knowledge:extract-progress',
   SessionGetRecentText: 'sessions:get-recent-text',
+  RulesGet: 'rules:get',
+  RulesSave: 'rules:save',
+  // ===== v2.0：全域模型对接中心 =====
+  ModelsGet: 'models:get',
+  ModelsProviderSet: 'models:provider:set',
+  ModelsCustomUpsert: 'models:custom:upsert',
+  ModelsCustomDelete: 'models:custom:delete',
+  ModelsKeySave: 'models:key:save',
+  ModelsKeyDelete: 'models:key:delete',
+  ModelsTest: 'models:test',
+  ModelsList: 'models:list',
+  ModelsMigrateLegacy: 'models:migrate-legacy',
   // ===== v2.0：Agent 管理 =====
   AgentsGet: 'agents:get',
   AgentImport: 'agents:import',
@@ -668,6 +680,75 @@ export interface RecentSessionTextResult {
   title?: string
   /** 会话文本（截断至 maxChars） */
   text?: string
+  error?: string
+}
+
+// ===================== v2.0：全域模型对接中心 =====================
+
+export type ProviderRegion = 'international' | 'china' | 'local'
+export type ProviderProtocol = 'openai' | 'anthropic' | 'ollama'
+
+export interface ModelProviderPreset {
+  id: string
+  name: string
+  region: ProviderRegion
+  protocol: ProviderProtocol
+  baseUrl: string
+  defaultModels: string[]
+  keyRequired: boolean
+  docs?: string
+}
+
+export interface ModelProviderConfig {
+  enabled: boolean
+  baseUrl?: string
+  models: string[]
+  defaultChat?: string
+  defaultExtract?: string
+  defaultEmbedding?: string
+}
+
+export interface CustomProviderPayload {
+  id: string
+  name: string
+  baseUrl: string
+  protocol: ProviderProtocol
+  models: string[]
+  enabled: boolean
+}
+
+export interface ModelsViewPayload {
+  presets: ModelProviderPreset[]
+  custom: CustomProviderPayload[]
+  providers: Record<string, ModelProviderConfig>
+  /** providerId -> Key 掩码（sk-****abcd）；无则空串 */
+  keyMasks: Record<string, string>
+}
+
+export interface ModelsProviderSetInput {
+  providerId: string
+  patch: Partial<ModelProviderConfig>
+}
+
+export interface ModelsCustomUpsertInput {
+  id: string
+  name: string
+  baseUrl: string
+  protocol?: ProviderProtocol
+  models?: string[]
+  enabled?: boolean
+}
+
+export interface ModelsTestInput {
+  providerId: string
+  protocol: ProviderProtocol
+  baseUrl: string
+  model?: string
+}
+
+export interface ModelsTestResult {
+  ok: boolean
+  latencyMs?: number
   error?: string
 }
 

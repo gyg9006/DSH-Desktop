@@ -1,26 +1,30 @@
 import { useState } from 'react'
 import type { JSX } from 'react'
-import { Settings as SettingsIcon, Palette, Keyboard, Info, Cpu } from 'lucide-react'
+import { Settings as SettingsIcon, Palette, Keyboard, Info, Cpu, ScrollText, KeyRound } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { GeneralSection } from './settings/GeneralSection'
 import { AppearanceSection } from './settings/AppearanceSection'
 import { ShortcutsSection } from './settings/ShortcutsSection'
 import { AdvancedSection } from './settings/AdvancedSection'
 import { AboutSection } from './settings/AboutSection'
+import { RulesSection } from './settings/RulesSection'
+import { ModelsSection } from './settings/ModelsSection'
 
-type SettingSection = 'general' | 'appearance' | 'shortcuts' | 'about' | 'advanced'
+type SettingSection = 'general' | 'appearance' | 'shortcuts' | 'about' | 'advanced' | 'rules' | 'models'
 
 const SECTIONS: Array<{ key: SettingSection; name: string; icon: typeof SettingsIcon }> = [
   { key: 'general', name: '通用', icon: SettingsIcon },
+  { key: 'models', name: '模型与 API', icon: KeyRound },
   { key: 'appearance', name: '外观', icon: Palette },
   { key: 'shortcuts', name: '快捷键', icon: Keyboard },
   { key: 'about', name: '关于', icon: Info },
-  { key: 'advanced', name: '高级配置', icon: Cpu }
+  { key: 'advanced', name: '高级配置', icon: Cpu },
+  { key: 'rules', name: '全局行为', icon: ScrollText }
 ]
 
 /**
  * 模块6：设置 —— 左侧子菜单 + 右侧表单。
- * 通用（语言/Agent 预设）、外观（主题）、快捷键、关于（版本/更新）、高级配置（环境/API/服务/备份/同步）。
+ * 通用、模型与 API（全域对接中心）、外观、快捷键、关于、高级配置、全局行为（永久指令）。
  */
 export function Settings(): JSX.Element {
   const [section, setSection] = useState<SettingSection>('general')
@@ -29,6 +33,8 @@ export function Settings(): JSX.Element {
     switch (section) {
       case 'general':
         return <GeneralSection />
+      case 'models':
+        return <ModelsSection />
       case 'appearance':
         return <AppearanceSection />
       case 'shortcuts':
@@ -37,6 +43,8 @@ export function Settings(): JSX.Element {
         return <AboutSection />
       case 'advanced':
         return <AdvancedSection />
+      case 'rules':
+        return <RulesSection />
     }
   }
 

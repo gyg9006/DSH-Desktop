@@ -203,15 +203,16 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
     pushLog(`会话格式检查失败：${error instanceof Error ? error.message : String(error)}`)
   }
 
-  // 端口：auto 探测 / fixed 校验
+  // 端口：auto 探测 / fixed 校验（被占用时自动顺延到下一个空闲端口）
   const config = readAppConfig()
   const svc = (config.service ?? {}) as ServiceConfig
   let port: number
   try {
     if (svc.portMode === 'fixed' && typeof svc.port === 'number' && svc.port > 0) {
-      port = await probeFreePort(svc.port, 1)
+      // 从目标端口起完整探测：目标被占则自动顺延（不再报错）
+      port = await probeFreePort(svc.port)
       if (port !== svc.port) {
-        return { ok: false, error: `端口 ${svc.port} 已被占用（可能是残留进程）。请先「清理残留进程」后重试，或改为自动探测` }
+        pushLog(`端口 ${svc.port} 已被占用，已自动顺延到 ${port}`)
       }
     } else {
       port = await probeFreePort(3080)

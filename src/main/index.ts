@@ -93,17 +93,7 @@ if (!gotLock) {
     const theme = getEffectiveTheme()
     createMainWindow(workspaceDir, theme)
 
-    // 关闭窗口不退出应用：隐藏到托盘继续驻留（服务与数据仍在后台）。
-    // 在窗口 close 事件里拦截（hide 而非销毁）；真正的退出走托盘「退出」菜单。
-    // 注意：必须在 createMainWindow 之后注册（此前 getMainWindow() 为 null，拦截会静默失效）。
-    const win = getMainWindow()
-    win?.on('close', (e) => {
-      if (!quitting) {
-        e.preventDefault()
-        win.hide()
-      }
-    })
-
+    // 关闭窗口 = 正常关闭 → window-all-closed → app.quit()（不再隐藏到托盘驻留）
     // 自动备份调度（规格 6.22）
     scheduleAutoBackup(workspaceDir)
 
@@ -120,20 +110,33 @@ if (!gotLock) {
     refreshTrayMenu(() => getMainWindow())
   })
 
-  // 退出时优雅关闭 dsh 服务（正常终止，宽限 3 秒后强制，规格 4.5）
+  // 退出时优雅关闭 dsh 服务；5 秒超时兜底强制退出，
+  // 避免 stopDshService 卡住导致应用无法退出、残留 electron 进程
   let quitting = false
 
   app.on('window-all-closed', () => {
-    // 不退出：桌面端常驻托盘（最小化/关闭均隐藏）
+    app.quit()
   })
 
   app.on('before-quit', (event) => {
-    if (quitting || !isServiceRunning()) return
+    if (quitting) return
     event.preventDefault()
     quitting = true
-    void stopDshService().finally(() => {
+    const forceTimer = setTimeout(() => {
+      logger.warn('退出超时（5 秒），强制结束进程')
       app.exit(0)
-    })
+    }, 5000)
+    const finish = (): void => {
+      clearTimeout(forceTimer)
+      app.exit(0)
+    }
+    if (isServiceRunning()) {
+      void stopDshService()
+        .catch((error) => logger.warn(`停止服务失败：${String(error)}`))
+        .finally(finish)
+    } else {
+      finish()
+    }
   })
 
   app.on('will-quit', () => {

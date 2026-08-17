@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { JSX } from 'react'
-import { Cpu, KeyRound, Plug, Power, DatabaseBackup, RefreshCw, GitBranch, Loader2, CheckCircle2, XCircle } from 'lucide-react'
-import type { ApiConfigPayload, BackupSettingsPayload, EnvItem, SyncConfigPayload } from '@shared/ipc'
+import { Cpu, Plug, Power, DatabaseBackup, RefreshCw, GitBranch, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import type { BackupSettingsPayload, EnvItem, SyncConfigPayload } from '@shared/ipc'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
@@ -9,12 +9,11 @@ import { Switch } from '../../ui/switch'
 import { Badge } from '../../ui/badge'
 import { cn } from '../../../lib/utils'
 
-/** 高级配置：环境检测 / API / 服务 / 开机自启 / 自动备份 / 异地同步。 */
+/** 高级配置：环境检测 / 服务 / 开机自启 / 自动备份 / 异地同步（模型与 API 已独立为「模型与 API」子菜单）。 */
 export function AdvancedSection(): JSX.Element {
   return (
     <div className="max-w-2xl space-y-4">
       <EnvCard />
-      <ApiCard />
       <ServiceCard />
       <BackupSyncCard />
     </div>
@@ -69,69 +68,6 @@ function EnvCard(): JSX.Element {
         <Button size="sm" variant="outline" onClick={() => void detect()} disabled={busy}>
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} 重新检测
         </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
-function ApiCard(): JSX.Element {
-  const [api, setApi] = useState<ApiConfigPayload | null>(null)
-  const [key, setKey] = useState('')
-  const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState('')
-
-  useEffect(() => {
-    void window.dshw.getApiConfig().then((c) => {
-      setApi(c)
-      setKey(c.apiKey ?? '')
-    })
-  }, [])
-
-  const save = async (): Promise<void> => {
-    const result = await window.dshw.setApiConfig({ apiKey: key })
-    if (result.ok && result.synced !== false) {
-      setTestResult('已保存并同步到 dsh（重新启动服务后生效）')
-    } else {
-      setTestResult(result.error ?? result.syncError ?? '保存失败')
-    }
-  }
-
-  const test = async (): Promise<void> => {
-    setTesting(true)
-    try {
-      const result = await window.dshw.testApiConnection()
-      setTestResult(result.ok ? `连接成功（${result.latencyMs ?? '?'} ms）` : (result.error ?? '连接失败'))
-    } finally {
-      setTesting(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <KeyRound className="h-4 w-4 text-cyber-neon" /> 模型与 API
-        </CardTitle>
-        <CardDescription>DeepSeek API Key 保存后自动写入 dsh 配置（密码框可切换明文）。</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Input
-            type="password"
-            placeholder="sk-…（DeepSeek API Key）"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            className="flex-1 font-mono"
-          />
-          <Button size="sm" variant="default" onClick={() => void save()}>
-            保存
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => void test()} disabled={testing || !key}>
-            {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />} 测试连接
-          </Button>
-        </div>
-        {testResult && <div className="text-xs text-cyber-dim">{testResult}</div>}
-        {api?.baseUrl && <div className="text-[11px] text-cyber-faint">Base URL：{api.baseUrl}</div>}
       </CardContent>
     </Card>
   )

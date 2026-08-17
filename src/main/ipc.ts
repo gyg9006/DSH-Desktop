@@ -20,7 +20,10 @@ import type {
   KnowledgeSearchQuery,
   KnowledgeExtractInput,
   KnowledgePipelineInput,
-  AgentCollaborateInput
+  AgentCollaborateInput,
+  ModelsProviderSetInput,
+  ModelsCustomUpsertInput,
+  ModelsTestInput
 } from '../shared/ipc'
 import { logger } from './logger'
 import { getWorkspaceDir, getRootDir, readAppConfig, updateAppConfig } from './config'
@@ -81,6 +84,10 @@ import {
 import { readAppLog, readDshLog, clearLogs, exportLogsZip } from './logs'
 import { getKnowledge, createKnowledgeCategory, renameKnowledgeCategory, deleteKnowledgeCategory, createKnowledgeEntry, updateKnowledgeEntry, deleteKnowledgeEntry, searchKnowledge, extractKnowledgeToStore, iterateKnowledge } from './knowledge'
 import { runExtractionPipeline, readRecentSessionText } from './skillOrchestrator'
+import { ensureGlobalRules, getRulesFilePath, saveGlobalRules } from './rules'
+import { getAllProviders, updateProviderConfig, updateCustomProvider, deleteCustomProvider, migrateLegacyApiConfig } from './provider-registry'
+import { saveApiKeySecure, readApiKeySecure, deleteApiKeySecure, maskKey } from './secure-storage'
+import { testAdapterConnection, listModelsFor } from './adapters'
 import { listAgents, importAgent, renameAgent, deleteAgent, runAgent, collaborateAgents } from './agents'
 import {
   checkForUpdate,
@@ -840,6 +847,85 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SessionGetRecentText, (_event, maxChars?: number) =>
     readRecentSessionText(getWorkspaceDir(), typeof maxChars === 'number' ? maxChars : 8000)
   )
+
+  // ===== v2.0：全局行为规则 =====
+  ipcMain.handle(IPC.RulesGet, () => {
+    const content = ensureGlobalRules(getWorkspaceDir())
+    return { ok: true, path: getRulesFilePath(getWorkspaceDir()), content }
+  })
+  ipcMain.handle(IPC.RulesSave, (_event, content: string) =>
+    saveGlobalRules(getWorkspaceDir(), String(content ?? ''))
+  )
+
+  // ===== v2.0：全域模型对接中心 =====
+  ipcMain.handle(IPC.ModelsGet, () => {
+    const view = getAllProviders(getWorkspaceDir())
+    const keyMasks: Record<string, string> = {}
+    for (const p of view.presets) {
+      const key = readApiKeySecure(getWorkspaceDir(), p.id)
+      if (key) keyMasks[p.id] = maskKey(key)
+    }
+    for (const c of view.custom) {
+      const key = readApiKeySecure(getWorkspaceDir(), c.id)
+      if (key) keyMasks[c.id] = maskKey(key)
+    }
+    return { ...view, keyMasks }
+  })
+  ipcMain.handle(IPC.ModelsProviderSet, (_event, input: ModelsProviderSetInput) => {
+    try {
+      updateProviderConfig(getWorkspaceDir(), String(input?.providerId ?? ''), input?.patch ?? {})
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
+  ipcMain.handle(IPC.ModelsCustomUpsert, (_event, input: ModelsCustomUpsertInput) => {
+    try {
+      updateCustomProvider(getWorkspaceDir(), input)
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
+  ipcMain.handle(IPC.ModelsCustomDelete, (_event, id: string) => {
+    try {
+      deleteCustomProvider(getWorkspaceDir(), String(id))
+      deleteApiKeySecure(getWorkspaceDir(), String(id))
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
+  ipcMain.handle(IPC.ModelsKeySave, (_event, providerId: string, key: string) => {
+    const id = String(providerId ?? '')
+    if (!id) return { ok: false, error: '缺少厂商 id' }
+    saveApiKeySecure(getWorkspaceDir(), id, String(key ?? ''))
+    const plain = readApiKeySecure(getWorkspaceDir(), id)
+    return { ok: true, mask: plain ? maskKey(plain) : '' }
+  })
+  ipcMain.handle(IPC.ModelsKeyDelete, (_event, providerId: string) => {
+    deleteApiKeySecure(getWorkspaceDir(), String(providerId ?? ''))
+    return { ok: true }
+  })
+  ipcMain.handle(IPC.ModelsTest, async (_event, input: ModelsTestInput) => {
+    const id = String(input?.providerId ?? '')
+    const key = id ? readApiKeySecure(getWorkspaceDir(), id) : undefined
+    return testAdapterConnection(input?.protocol ?? 'openai', String(input?.baseUrl ?? ''), key, input?.model)
+  })
+  ipcMain.handle(IPC.ModelsList, async (_event, input: ModelsTestInput) => {
+    const id = String(input?.providerId ?? '')
+    const key = id ? readApiKeySecure(getWorkspaceDir(), id) : undefined
+    return listModelsFor(input?.protocol ?? 'openai', String(input?.baseUrl ?? ''), key)
+  })
+  ipcMain.handle(IPC.ModelsMigrateLegacy, () => {
+    try {
+      const legacy = readApiConfig()
+      migrateLegacyApiConfig(getWorkspaceDir(), legacy.apiKey, (id, k) => saveApiKeySecure(getWorkspaceDir(), id, k))
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
 
   // ===== v2.0：Agent 管理 =====
   ipcMain.handle(IPC.AgentsGet, () => listAgents(getWorkspaceDir()))

@@ -4,6 +4,32 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.0.0] - 2026-08-17
+
+### 重构
+
+- **渲染层整体迁移 Vue → React 19**：TypeScript + Tailwind CSS + shadcn 风格组件（Radix primitives：button / card / input / dialog / tabs / switch / badge / pagination 等），全类型 IPC 桥保持不变。
+- **赛博朋克 / 科技感深色 UI**：自定义无边框标题栏（frame:false + 窗口控制 IPC）、6 入口侧边栏（霓虹流光选中态）、底部状态栏（端口 / 本地地址 / 状态灯 + 服务启停）、Canvas 粒子欢迎页、玻璃拟态面板、数据流动画与扫描线。
+
+### 新增（6 大功能模块）
+
+1. **核心工作台**：webview 嵌入完整 DSH Web 界面；会话导入（文件夹 / 文件）；「提炼为知识」对话框（启发式提取 → 知识库，无分类引导新建）。
+2. **会话管理**：便签式分组卡片网格（[+新增分组] 虚线卡 + 分组重命名/删除/置顶）；分组详情会话列表（重命名 / 收藏 / 移动到组 / 返回工作区 / 导出 / 删除）。
+3. **Agent 管理**：GitHub URL 导入（自动拉取仓库信息）；卡片状态徽章；运行（日志弹窗）；多选「协同工作」（并行日志流骨架）。
+4. **知识库**：分类网格（条目计数 + 数据流动画）；知识条目 CRUD（自动时间戳 + 关键词标签）；关键词 / 分类检索；合并去重迭代；SkillAdapter 接口（启发式 Mock，生产可接 LLM）。
+5. **Skill 管理**：Tabs [插件市场] [技能市场] [已安装]；联网搜索（按名字/功能词）；🔥 前 10 推荐标记；每页 10 项分页器；已安装插件 / 技能双列管理。
+6. **设置**：左侧子菜单 + 右侧表单——通用（语言 / Agent 预设）、外观（主题深/浅/跟随系统）、快捷键、关于（版本 + 更新）、高级配置（环境检测 / 模型与 API / 服务与运行 / 自动备份 / 异地同步）。
+
+### 修复
+
+- Electron 不支持 `window.prompt()`：知识库分类创建/重命名、Agent 重命名改为 Dialog 输入框。
+- 打包平铺脚本支持全新 app 目录（仅含 win-unpacked / builder 辅助文件）。
+
+### 质量
+
+- 主进程新增 `knowledge.ts` / `agents.ts` 模块与 13 个新 IPC 通道（含 12 项新单元测试）。
+- 单元测试 **189 项**全部通过；typecheck（node + web）全绿；electron-vite 构建 + electron-builder 打包验证通过；打包产物 CDP 实测（布局 / 服务 / webview / 各模块）。
+
 ## [0.3.0] - 2026-08-16
 
 ### 新增

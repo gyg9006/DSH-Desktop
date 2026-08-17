@@ -19,10 +19,13 @@ if (!fs.existsSync(unpacked)) {
   process.exit(1)
 }
 
-// 校验目标 app/ 形态：应包含 resources/ 或 .exe（防误删工作文件夹）
+// 校验目标 app/ 形态：应包含 resources/ 或 .exe，或是仅含 win-unpacked 的全新目录（防误删工作文件夹）
 const appHasArtifacts = fs.existsSync(path.join(appDir, 'resources')) ||
   (fs.existsSync(appDir) && fs.readdirSync(appDir).some((f) => /\.exe$/i.test(f)))
-if (fs.existsSync(appDir) && !appHasArtifacts) {
+const appIsFresh = fs.existsSync(appDir) && fs.readdirSync(appDir).length === 0
+const appHasOnlyUnpacked =
+  fs.existsSync(appDir) && fs.readdirSync(appDir).every((f) => f === 'win-unpacked' || f.startsWith('builder-'))
+if (fs.existsSync(appDir) && !appHasArtifacts && !appIsFresh && !appHasOnlyUnpacked) {
   console.error(`目标目录 ${appDir} 不是 app 目录形态（缺 resources/ 或 .exe），拒绝平铺`)
   process.exit(1)
 }

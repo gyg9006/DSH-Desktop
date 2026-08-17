@@ -1,25 +1,25 @@
 <div align="center">
 
-# 🚀 DSH 桌面
+# 🚀 DSH 桌面 v2.0
 
 **把 DeepSeek Harness 装进一个文件夹 —— 双击即用 · 拷贝即迁移 · 零安装、零残留**
 
-> DeepSeek Harness（`@deepseek-ai/dsh`）的便携式 Windows 桌面客户端，
-> 全中文界面，无需一行命令，打开就能聊。
+> DeepSeek Harness（`@deepseek-ai/dsh`）的便携式 Windows 桌面客户端
+> React + 赛博朋克 UI · 全中文界面 · 无需一行命令
 
-[![版本](https://img.shields.io/badge/版本-v0.3.0-1E2A78)](https://github.com/gyg9006/DSH-Desktop/releases)
+[![版本](https://img.shields.io/badge/版本-v2.0.0-1E2A78)](https://github.com/gyg9006/DSH-Desktop/releases)
 [![平台](https://img.shields.io/badge/平台-Windows%2010%2F11-lightgrey)]()
-[![Electron](https://img.shields.io/badge/Electron-43.4-47848F)]()
-[![Vue](https://img.shields.io/badge/Vue-3.5-42b883)]()
+[![React](https://img.shields.io/badge/React-19-61DAFB)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6)]()
-[![测试](https://img.shields.io/badge/Tests-181%20passed-brightgreen)]()
+[![Electron](https://img.shields.io/badge/Electron-43.4-47848F)]()
+[![测试](https://img.shields.io/badge/Tests-189%20passed-brightgreen)]()
 [![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
 
 ## 📥 立即下载
 
-**👉 [GitHub Releases 下载 v0.3.0（绿色便携版）](https://github.com/gyg9006/DSH-Desktop/releases)**
+**👉 [GitHub Releases 下载 v2.0.0（绿色便携版）](https://github.com/gyg9006/DSH-Desktop/releases)**
 
-- 下载 `DSH-Desktop-v0.3.0-win.zip`，解压后双击「启动 DSH 桌面.bat」即可开始使用；
+- 下载 `DSH-Desktop-v2.0.0-win.zip`，解压后双击「启动 DSH 桌面.bat」即可使用；
 - 内置便携 Node / Git / dsh 运行环境，**电脑上什么都不用装**；
 - 支持应用内**自动更新**（每 6 小时检测 GitHub Releases 新版本，一键升级）。
 
@@ -29,43 +29,42 @@
 
 ## 📸 先看一眼
 
-| 主界面（侧边栏 + 内嵌 dsh 对话） | 插件与技能（联网搜索） |
+| 主界面（内嵌 dsh 对话） | 会话管理（便签卡片） |
 |:---:|:---:|
-| ![主界面](screenshots/main.png) | ![插件与技能](screenshots/plugins-skills.png) |
-| **已安装（插件 + 技能一目了然）** | **关于（版本与更新）** |
-| ![已安装](screenshots/plugins-installed.png) | ![关于](screenshots/about.png) |
-| **环境检测（一键安装缺失项）** | **服务与运行（端口 / 自启 / 托盘）** |
-| ![环境检测](screenshots/settings-env.png) | ![服务与运行](screenshots/settings-service.png) |
-| **工作文件夹（拷贝即迁移）** | **备份与恢复（自动备份）** |
-| ![工作文件夹](screenshots/settings-workspace.png) | ![备份与恢复](screenshots/settings-backup.png) |
-| **异地同步（A/B 电脑）** | |
-| ![异地同步](screenshots/settings-sync.png) | |
+| ![主界面](screenshots/v2-main.png) | ![会话管理](screenshots/v2-sessions.png) |
+| **Agent 管理（GitHub 导入）** | **知识库（提炼 / 检索 / 迭代）** |
+| ![Agent 管理](screenshots/v2-agents.png) | ![知识库](screenshots/v2-knowledge.png) |
+| **Skill 管理（插件 / 技能市场）** | **设置（子菜单布局）** |
+| ![Skill 管理](screenshots/v2-skills.png) | ![设置](screenshots/v2-settings.png) |
+| **高级配置（环境 / API / 备份 / 同步）** | |
+| ![高级配置](screenshots/v2-settings-advanced.png) | |
 
 ---
 
 ## ✨ 为什么值得下载
 
 ### 🟢 一个文件夹 = 你的整个工作台
-- **绿色免安装**：Node / Git / dsh 全部内置在文件夹里，双击即用，不需要命令行、不需要管理员权限、不写注册表、不污染 `%APPDATA%`；
-- **拷贝即迁移**：把整个文件夹拷到 U 盘 / 网盘 / 局域网，换任何一台 Win10/Win11 电脑继续用 —— 对话记录、技能、插件、API 配置原样带过去，dsh 自动修复内部依赖，数据零丢失。
+- **绿色免安装**：Node / Git / dsh 全部内置，双击即用，不写注册表、不污染 `%APPDATA%`；
+- **拷贝即迁移**：整个文件夹拷到任意 Win10/Win11 电脑继续用 —— 对话、技能、插件、API 配置原样带过去。
 
-### 💬 开箱即聊，真实 dsh
-- 一键启动真实 DeepSeek Harness 服务（端口自动探测、被占用自动顺延），内嵌官方 Web 界面直接对话；
-- 模型与 API：填入 DeepSeek API Key 即自动写入 dsh 配置并热重载，无需重复配置。
+### 🛰️ 赛博朋克工作台
+- 自定义无边框标题栏、霓虹流光侧边栏、玻璃拟态面板、Canvas 粒子欢迎页；
+- 底部状态栏实时显示 dsh 端口 / 本地地址 / 运行状态灯，一键启停服务。
 
-### 🧩 插件与技能，联网一键安装
-- **功能插件**：内置推荐插件一键启用/停用，还支持按名字或功能词**联网搜索** npm 插件直接安装；
-- **推荐技能**：50 个精选开源技能（含 Anthropic 官方技能、obra/superpowers 等），并支持**联网搜索**任意 npm 技能包，装进 `workspace/skills` 立即在对话中使用。
+### 💬 开箱即聊
+- 内嵌真实 DeepSeek Harness Web 界面直接对话；填入 API Key 自动同步 dsh 配置并热重载。
 
-### 🗂 强大的会话管理
-- 会话**重命名 / 分叉 / 归档 / 收藏 / 分组 / 批量删除**，归档按年月日归档可搜索还原；
-- **导入会话**：文件夹 / 单个会话 / zip / tar 压缩包，导入自动解压、自动修复编码；
-- **异地同步**：A/B 两台电脑基于 Git 同步全部会话。
+### 🧩 六大功能模块
+1. **核心工作台**：内嵌 dsh 对话 + 会话导入（文件夹/文件）+ 「提炼为知识」一键入库；
+2. **会话管理**：便签式分组卡片，会话重命名 / 收藏 / 移动 / 导出 / 删除；
+3. **Agent 管理**：GitHub URL 导入 Agent 项目，运行与多 Agent 协同；
+4. **知识库**：从会话提炼碎片化知识，自动打时间戳与关键词标签，支持检索与合并去重迭代；
+5. **Skill 管理**：插件 / 技能双市场，联网搜索安装，🔥 前 10 推荐，已安装双列管理；
+6. **设置**：通用（语言/预设）、外观（主题）、快捷键、关于、高级配置（环境/API/服务/备份/同步）。
 
 ### 🛟 数据安全
-- 一键备份（每日 / 每周自动滚动）、恢复、出厂重置；
-- 一键迁移本机已有的 dsh 存量数据（对话 / 技能 / 设置 / 凭据）；
-- 应用内自动 / 手动更新，更新包走 GitHub Releases。
+- 一键备份 / 自动备份（每天每周 + 滚动保留）/ 恢复 / 出厂重置；
+- A/B 电脑 Git 异地同步；应用内自动 / 手动更新。
 
 ---
 
@@ -73,17 +72,14 @@
 
 | 模块 | 能力 |
 |---|---|
-| **环境检测** | Node / npm / pnpm / Git / dsh 五项检测，缺失项一键安装到工作文件夹 |
-| **服务与运行** | 一键启停、端口自动顺延、启动超时配置、开机自启、系统托盘常驻 |
-| **模型与 API** | API Key 管理（密码框）、自定义 Base URL、模型发现、测试连接，自动同步 dsh |
-| **会话管理** | 分组 / 归档 / 收藏 / 重命名 / 分叉 / 移动 / 批量删除 / 导入导出 |
-| **插件** | 内置推荐插件 + 联网搜索 npm 插件（按名字/功能词）一键安装卸载 |
-| **技能** | 50 个精选技能 + 联网搜索 npm 技能包，一键安装到 workspace/skills |
-| **备份恢复** | 一键备份 / 自动备份（每天每周 + 滚动保留）/ 导出 zip / 恢复 |
-| **异地同步** | 基于 Git 的 A/B 电脑会话同步（上传 / 下载 / 对齐删除） |
-| **通用设置** | 语言（中/英）、深色/浅色/跟随系统、Agent 预设，热同步 dsh |
-| **日志与初始化** | 应用 / dsh 日志查看、过滤、导出、清空；出厂重置 |
-| **关于与更新** | 客户端 / dsh / Node / Git 版本一目了然，自动或手动更新 |
+| **核心工作台** | webview 嵌入 dsh 对话、会话导入（文件夹/文件/压缩包）、知识提炼 |
+| **会话管理** | 便签分组卡片、重命名/收藏/移动/导出/删除、返回工作区 |
+| **Agent 管理** | GitHub 项目导入、卡片状态、运行日志、多选协同工作 |
+| **知识库** | 分类网格、条目 CRUD、关键词/分类检索、启发式提炼、合并去重 |
+| **Skill 管理** | 插件市场/技能市场（联网搜索 + 分页 + 推荐标记）、已安装双列管理 |
+| **设置** | 通用/外观/快捷键/关于/高级配置（环境检测、API、服务、备份、同步） |
+| **环境** | Node / npm / pnpm / Git / dsh 一键检测与安装 |
+| **更新** | 自动（每 6 小时）/ 手动检查 GitHub Releases，一键升级 |
 
 **快捷键**：`Ctrl+B` 收起/展开侧边栏 · `Ctrl+N` 新建对话 · `Ctrl+,` 打开设置
 
@@ -106,9 +102,9 @@ DSH-Desktop/
 ```
 
 1. 解压后双击「启动 DSH 桌面.bat」；
-2. 首次启动三步向导：确认工作文件夹 → 环境检测（已内置，无需安装）→ 完成；
-3. 「设置 → 模型与 API」填入 DeepSeek API Key → 保存 → 测试连接；
-4. 点「开始对话」，服务自动拉起，开始使用。
+2. 底部状态栏点「启动服务」，自动拉起 dsh；
+3. 「设置 → 高级配置」填入 DeepSeek API Key → 测试连接；
+4. 到「核心工作台」开始对话，聊完点「提炼为知识」沉淀到知识库。
 
 > 💡 换机：整个文件夹拷过去即可，无需重新安装任何东西。
 
@@ -118,7 +114,7 @@ DSH-Desktop/
 # 环境要求：Node.js ≥ 18（实测 v24 正常）
 npm install
 npm run dev          # 开发模式（热更新）
-npm test             # 单元测试（181 项）
+npm test             # 单元测试（189 项）
 npm run pack:dir     # 打包为绿色目录（输出到 ../DSH-Desktop/app）
 ```
 
@@ -128,22 +124,26 @@ npm run pack:dir     # 打包为绿色目录（输出到 ../DSH-Desktop/app）
 
 | 层 | 技术 |
 |---|---|
-| 桌面框架 | Electron 43 + electron-vite 5 + electron-builder 26 |
-| 前端 | Vue 3.5 + Pinia + Element Plus + Tailwind CSS（深色模式） |
-| 语言 | TypeScript 5.9（主进程 / preload / 渲染层全类型） |
-| 测试 | Vitest（181 项单测，主进程纯逻辑 + 共享层） |
+| 桌面框架 | Electron 43（无边框窗口）+ electron-vite 5 + electron-builder 26 |
+| 前端 | **React 19** + TypeScript 5.9 + Tailwind CSS（赛博朋克主题）+ shadcn 风格组件（Radix primitives） |
+| 状态/数据 | hooks + IPC 白名单桥（contextBridge，全类型定义） |
+| 测试 | Vitest（189 项，主进程纯逻辑 + 共享层） |
 | 运行时 | 便携 Node / Git / dsh（`@deepseek-ai/dsh`） |
 
 ```
 src/
-├── main/       主进程：配置 / 环境检测 / 安装器 / 迁移 / dsh 服务 / 会话 /
-│               API / 插件 / 技能市场 / 备份 / 同步 / 托盘 / 更新 / IPC
+├── main/       主进程：dsh 服务 / 会话 / 知识库 / Agent / 插件 / 技能市场 /
+│               API / 备份 / 同步 / 更新 / 迁移 / 窗口 / 托盘 / IPC
 ├── preload/    安全白名单 API（contextBridge）
-├── renderer/   Vue3 界面（侧边栏 / 对话 webview / 设置 10 Tab / 向导）
-└── shared/     主进程与渲染层共享的纯逻辑与类型（可单测）
+├── renderer/   React 19 界面
+│   └── src/
+│       ├── components/layout/   TitleBar / Sidebar / Footer
+│       ├── components/views/    6 大模块视图 + settings 子页
+│       ├── components/ui/       shadcn 风格组件（button/card/dialog/tabs/…）
+│       ├── hooks/               useDshService / useTheme
+│       └── lib/                 cn 工具 / appInfo
+└── shared/     主进程与渲染层共享的类型与纯逻辑
 ```
-
-> 关键技术：通过 `$DSH_HOME` 环境变量把全部 dsh 数据收敛到工作文件夹（`DSH_TELEMETRY_DISABLED=1` 关闭遥测）；Electron userData/sessionData/logs 在 ready 前重定向，实测零系统残留。
 
 ---
 
@@ -153,27 +153,22 @@ src/
 未签名应用的正常提示：点「更多信息 → 仍要运行」即可。程序不联网上传任何数据。
 
 **杀毒软件误报？**
-便携应用偶发误报，将整个文件夹加入白名单即可；如需彻底消除可用代码签名证书签名。
+便携应用偶发误报，将整个文件夹加入白名单即可。
 
 **端口被占用？**
-dsh 默认 3080，应用自动探测并在占用时顺延到下一可用端口；也可在「设置 → 服务与运行」手动固定。
+dsh 默认 3080，应用自动探测并在占用时顺延；也可在「设置 → 高级配置 → 服务与运行」固定端口。
 
-**换机后 dsh 提示异常？**
-首次启动会自动重建内部依赖链接（自愈）；若仍未生效，删除 `$DSH_HOME/profiles/node_modules` 后重启服务。
-
-**备份恢复后需要做什么？**
-备份不含运行环境（体积大且机器相关），换机恢复后重新执行一次「环境检测 → 一键安装缺失项」即可，数据无损。
+**知识库如何补充？**
+在「核心工作台」点「提炼为知识」，粘贴会话内容即可自动提取代码片段与经验段落（生产环境可接入 LLM 提炼技能）。
 
 ---
 
 ## 🗺️ 里程碑
 
-| 里程碑 | 内容 | 状态 |
-|---|---|---|
-| M1~M7 | 12 节规格全部落地：环境检测、一键安装、迁移、服务生命周期、会话管理、打包便携验证、错误处理加固 | ✅ |
-| R2~R9 | 迭代增强：会话组织（分组/归档/收藏/批量）、导入会话、异地同步、插件与技能市场、API 双向同步、视图分组排序、中文路径加固 | ✅ |
-| v0.2.0 | 应用内版本更新（自动/手动）、YAML 往返修复、关闭窗口修复、服务超时修复 | ✅ |
-| v0.3.0 | 插件/技能**联网搜索**（按名字/功能词）、设置拆分（日志与初始化 / 关于）、已安装双列表 | ✅ |
+| 版本 | 内容 |
+|---|---|
+| v0.1~0.3 | 12 节规格落地：环境检测、会话管理、插件/技能市场、备份同步、自动更新（Vue 版） |
+| **v2.0** | **React 19 + 赛博朋克 UI 全面重构**：无边框标题栏、6 入口侧边栏、粒子欢迎页、核心工作台（知识提炼）、会话卡片视图、Agent 管理、知识库、Skill 管理、设置子菜单 |
 
 ---
 

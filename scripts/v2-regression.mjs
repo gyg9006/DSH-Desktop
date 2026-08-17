@@ -91,6 +91,9 @@ async function testLayout() {
 
 async function testService() {
   console.log('\n[T2] 服务生命周期')
+  // 确保核心工作台视图挂载（webview 依赖）
+  await clickAside('核心工作台')
+  await wait(800)
   // 确保已停止
   const snap = await ev(`window.dshw.getServiceStatus().then(s => JSON.stringify(s))`)
   const status = JSON.parse(snap).status
@@ -123,6 +126,8 @@ async function testService() {
 
 async function testDshCore() {
   console.log('\n[T3] 核心工作台（webview + 知识提炼）')
+  await clickAside('核心工作台')
+  await wait(800)
   // 启动服务（webview）
   await ev(`window.dshw.startService()`)
   let wv = false
@@ -149,34 +154,35 @@ async function testDshCore() {
       check('dsh Web 界面有内容', false, 'webview CDP 连接失败')
     }
   }
-  // 知识提炼全链路
+  // 一键智能提炼流水线（提炼会话）
   await clickAside('核心工作台')
   await wait(800)
-  check('工作台工具栏（提炼为知识）', await ev(`[...document.querySelectorAll('button')].some(b => b.innerText.includes('提炼为知识'))`))
+  check('工作台工具栏（提炼会话）', await ev(`[...document.querySelectorAll('button')].some(b => b.innerText.includes('提炼会话'))`))
   check('工作台工具栏（导入文件夹）', await ev(`[...document.querySelectorAll('button')].some(b => b.innerText.includes('导入文件夹'))`))
   check('工作台工具栏（导入文件）', await ev(`[...document.querySelectorAll('button')].some(b => b.innerText.includes('导入文件'))`))
   // 建分类
   await ev(`window.dshw.knowledgeCategoryCreate('e2e-回归分类').then(r => JSON.stringify(r))`)
   await wait(300)
-  // 提炼
+  // 流水线提炼
   console.log('  提炼:')
-  await clickText('提炼为知识')
+  await clickText('提炼会话')
   await wait(700)
   check('提炼对话框打开', await dialogVisible())
-  await setInput('.fixed textarea[placeholder*="粘贴会话内容"]', '```ts\n// 防抖函数\nfunction debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms) } }\n```\n经验：防抖用于输入事件，节流用于滚动。')
+  await setInput('.fixed textarea[placeholder*="会话内容"]', '```ts\n// 防抖函数\nfunction debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms) } }\n```\n经验：防抖用于输入事件，节流用于滚动。')
   await wait(300)
   const sel = await ev(`(() => { const s = document.querySelector('.fixed select'); if (!s) return 'NO_SEL'; const o = [...s.options].find(x => x.text.includes('e2e-回归分类')); if (!o) return 'NO_OPT'; s.value = o.value; s.dispatchEvent(new Event('change', { bubbles: true })); return 'ok'; })()`)
   check('选择分类', sel === 'ok', sel)
   await wait(300)
-  await clickText('开始提炼')
-  await wait(2000)
-  check('提炼成功提示', await ev(`(() => { const d = [...document.querySelectorAll('.fixed')].find(x => x.innerText.includes('提炼成功')); return !!d; })()`))
+  await clickText('开始一键提炼')
+  await wait(2500)
+  check('提炼成功提示', await ev(`(() => { const d = [...document.querySelectorAll('.fixed')].find(x => x.innerText.includes('✨') && (x.innerText.includes('存入') || x.innerText.includes('合并'))); return !!d; })()`))
   // 入库验证
   const kb = await ev(`window.dshw.knowledgeGet().then(p => JSON.stringify({ cats: p.categories.length, entries: p.entries.length }))`)
   const kbData = JSON.parse(kb)
   check('知识库条目已入库', kbData.entries > 0, kb)
-  // 清理提炼的测试数据（保留分类，知识库单测区清理）
-  await ev(`window.dshw.knowledgeGet().then(p => Promise.all(p.entries.map(e => window.dshw.knowledgeEntryDelete(e.id))))`)
+  // 关闭对话框
+  await ev(`(() => { const b = [...document.querySelectorAll('.fixed button')].find(x => x.innerText.includes('关闭')); if (b) b.click(); return 'ok'; })()`)
+  await wait(400)
 }
 
 async function testSessions() {

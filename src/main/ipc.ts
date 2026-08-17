@@ -19,6 +19,7 @@ import type {
   UiEventType,
   KnowledgeSearchQuery,
   KnowledgeExtractInput,
+  KnowledgePipelineInput,
   AgentCollaborateInput
 } from '../shared/ipc'
 import { logger } from './logger'
@@ -79,6 +80,7 @@ import {
 } from './backup'
 import { readAppLog, readDshLog, clearLogs, exportLogsZip } from './logs'
 import { getKnowledge, createKnowledgeCategory, renameKnowledgeCategory, deleteKnowledgeCategory, createKnowledgeEntry, updateKnowledgeEntry, deleteKnowledgeEntry, searchKnowledge, extractKnowledgeToStore, iterateKnowledge } from './knowledge'
+import { runExtractionPipeline, readRecentSessionText } from './skillOrchestrator'
 import { listAgents, importAgent, renameAgent, deleteAgent, runAgent, collaborateAgents } from './agents'
 import {
   checkForUpdate,
@@ -827,6 +829,17 @@ export function registerIpcHandlers(): void {
     extractKnowledgeToStore(getWorkspaceDir(), input ?? {})
   )
   ipcMain.handle(IPC.KnowledgeIterate, () => iterateKnowledge(getWorkspaceDir()))
+
+  // 一键智能提炼流水线（进度经 IPC.KnowledgeExtractProgress 广播）
+  ipcMain.handle(IPC.KnowledgeExtractPipeline, (_event, input: KnowledgePipelineInput) =>
+    runExtractionPipeline(getWorkspaceDir(), input ?? {}, (progress) => {
+      const win = getMainWindow()
+      if (win && !win.isDestroyed()) win.webContents.send(IPC.KnowledgeExtractProgress, progress)
+    })
+  )
+  ipcMain.handle(IPC.SessionGetRecentText, (_event, maxChars?: number) =>
+    readRecentSessionText(getWorkspaceDir(), typeof maxChars === 'number' ? maxChars : 8000)
+  )
 
   // ===== v2.0：Agent 管理 =====
   ipcMain.handle(IPC.AgentsGet, () => listAgents(getWorkspaceDir()))

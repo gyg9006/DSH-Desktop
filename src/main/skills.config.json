@@ -1,0 +1,34 @@
+{
+  "$schema": "./skills.config.schema.json",
+  "version": 1,
+  "llm": {
+    "enabled": true,
+    "model": "deepseek-chat",
+    "timeoutMs": 30000
+  },
+  "skills": {
+    "session-distiller": {
+      "enabled": true,
+      "fallbackPrompt": "分析以下对话，提取：1.核心问题 2.最终解决方案 3.关键代码片段 4.涉及的技术栈标签。忽略闲聊和错误尝试。输出 JSON 格式：{\"title\":string,\"summary\":string,\"code_snippets\":[{\"language\":string,\"code\":string,\"comment\":string}],\"tags\":string[]}。\n\n会话内容：\n{session_text}"
+    },
+    "code-snippet-extractor": {
+      "enabled": true,
+      "fallbackPrompt": "为以下代码片段补充：语言标记、依赖说明、简要注释。输出 JSON 数组：[{\"language\":string,\"code\":string,\"comment\":string,\"dependencies\":string[]}]。\n\n代码片段：\n{code_snippets}"
+    },
+    "vector-embedder": {
+      "enabled": false,
+      "fallbackPrompt": "",
+      "note": "本地无 Embedding 服务时使用内置轻量确定性向量（token 哈希 BOW 128 维）；如配置远程 Embedding API 可在此启用"
+    },
+    "knowledge-refiner": {
+      "enabled": true,
+      "fallbackPrompt": "以下是已存在的相似知识条目与新的提炼结果，请增量合并：保留最新信息、废弃旧冲突信息，输出合并后的单条知识（title/content/tags）。\n\n已有条目：\n{existing_entry}\n\n新提炼：\n{new_entry}",
+      "similarityThreshold": 0.85
+    },
+    "markdown-archiver": {
+      "enabled": true,
+      "fallbackPrompt": "",
+      "note": "生成含 YAML Frontmatter 的 Markdown 知识卡片并写入 ./knowledge_base/"
+    }
+  }
+}

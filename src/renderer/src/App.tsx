@@ -10,6 +10,7 @@ import { AgentMgr } from './components/views/AgentMgr'
 import { KnowledgeBase } from './components/views/KnowledgeBase'
 import { SkillMgr } from './components/views/SkillMgr'
 import { Settings } from './components/views/Settings'
+import { ToastProvider } from './components/ui/toast'
 import { useTheme } from './hooks/useTheme'
 
 /**
@@ -40,13 +41,15 @@ export default function App(): JSX.Element {
   }
 
   return (
-    <div className="flex h-full flex-col bg-cyber-bg text-cyber-text">
-      <TitleBar />
-      <div className="flex min-h-0 flex-1">
-        <Sidebar active={view} onSelect={setView} />
-        <main className="min-w-0 flex-1 overflow-hidden">{renderView()}</main>
+    <ToastProvider>
+      <div className="flex h-full flex-col bg-cyber-bg text-cyber-text">
+        <TitleBar />
+        <div className="flex min-h-0 flex-1">
+          <Sidebar active={view} onSelect={setView} />
+          <main className="min-w-0 flex-1 overflow-hidden">{renderView()}</main>
+        </div>
+        <Footer />
       </div>
-      <Footer />
-    </div>
+    </ToastProvider>
   )
 }

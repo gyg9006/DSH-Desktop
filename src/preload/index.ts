@@ -52,6 +52,10 @@ import type {
   KnowledgeExtractInput,
   KnowledgeExtractResult,
   KnowledgeIterateResult,
+  KnowledgePipelineInput,
+  KnowledgePipelineResult,
+  KnowledgePipelineProgress,
+  RecentSessionTextResult,
   AgentsPayload,
   AgentImportResult,
   AgentRunResult,
@@ -357,6 +361,20 @@ const api = {
   knowledgeExtract: (input: KnowledgeExtractInput): Promise<KnowledgeExtractResult> =>
     ipcRenderer.invoke(IPC.KnowledgeExtract, input),
   knowledgeIterate: (): Promise<KnowledgeIterateResult> => ipcRenderer.invoke(IPC.KnowledgeIterate),
+  /** 一键智能提炼流水线（六步 Skill 编排，进度经 onKnowledgeExtractProgress 广播）。 */
+  extractKnowledgePipeline: (input: KnowledgePipelineInput): Promise<KnowledgePipelineResult> =>
+    ipcRenderer.invoke(IPC.KnowledgeExtractPipeline, input),
+  /** 订阅提炼流水线进度事件；返回取消订阅函数。 */
+  onKnowledgeExtractProgress: (callback: (p: KnowledgePipelineProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, p: KnowledgePipelineProgress): void => callback(p)
+    ipcRenderer.on(IPC.KnowledgeExtractProgress, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.KnowledgeExtractProgress, listener)
+    }
+  },
+  /** 读取最近会话文本（供「提炼会话」自动填充）。 */
+  getRecentSessionText: (maxChars?: number): Promise<RecentSessionTextResult> =>
+    ipcRenderer.invoke(IPC.SessionGetRecentText, maxChars),
 
   // ===== v2.0：Agent 管理 =====
   agentsGet: (): Promise<AgentsPayload> => ipcRenderer.invoke(IPC.AgentsGet),

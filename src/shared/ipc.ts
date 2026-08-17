@@ -111,6 +111,9 @@ export const IPC = {
   KnowledgeSearch: 'knowledge:search',
   KnowledgeExtract: 'knowledge:extract',
   KnowledgeIterate: 'knowledge:iterate',
+  KnowledgeExtractPipeline: 'knowledge:extract-pipeline',
+  KnowledgeExtractProgress: 'knowledge:extract-progress',
+  SessionGetRecentText: 'sessions:get-recent-text',
   // ===== v2.0：Agent 管理 =====
   AgentsGet: 'agents:get',
   AgentImport: 'agents:import',
@@ -616,6 +619,55 @@ export interface KnowledgeIterateResult {
   removed: number
   merged: number
   message: string
+  error?: string
+}
+
+// ===================== v2.0：一键智能提炼流水线 =====================
+
+export type ExtractStepKey =
+  | 'distill' // 预处理与蒸馏 session-distiller
+  | 'extract' // 代码萃取 code-snippet-extractor
+  | 'vector' // 语义向量化 vector-embedder
+  | 'refine' // 去重合并 knowledge-refiner
+  | 'archive' // 归档索引 markdown-archiver
+
+export interface KnowledgePipelineInput {
+  /** 会话内容快照（提炼来源） */
+  sessionText: string
+  sessionId?: string
+  categoryId?: string
+}
+
+export interface KnowledgePipelineProgress {
+  step: ExtractStepKey
+  /** 0-100 */
+  percent: number
+  message: string
+}
+
+export interface KnowledgePipelineResult {
+  ok: boolean
+  /** 落库条目（可能有多个） */
+  saved?: number
+  merged?: number
+  categoryName?: string
+  /** 生成的 markdown 文件路径 */
+  files?: string[]
+  /** 失败步骤（如 'vector'） */
+  failedStep?: ExtractStepKey | null
+  error?: string
+  /** 需要新建分类 */
+  needCategory?: boolean
+  /** 流水线日志（每步摘要） */
+  log: string[]
+}
+
+export interface RecentSessionTextResult {
+  ok: boolean
+  /** 会话标题 */
+  title?: string
+  /** 会话文本（截断至 maxChars） */
+  text?: string
   error?: string
 }
 

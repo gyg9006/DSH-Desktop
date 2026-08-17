@@ -16,6 +16,7 @@ import { cn } from '../../lib/utils'
  */
 export function KnowledgeBase(): JSX.Element {
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])
+  const [catDialog, setCatDialog] = useState<{ mode: 'create' | 'rename'; id?: string; name: string } | null>(null)
   const [entries, setEntries] = useState<KnowledgeEntry[]>([])
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [keyword, setKeyword] = useState('')
@@ -43,19 +44,22 @@ export function KnowledgeBase(): JSX.Element {
   }, [entries, activeCategory, keyword])
 
   const createCategory = async (): Promise<void> => {
-    const name = prompt('新分类名称：')
-    if (name && name.trim()) {
-      await window.dshw.knowledgeCategoryCreate(name)
-      await refresh()
-    }
+    setCatDialog({ mode: 'create', name: '' })
   }
 
   const renameCategory = async (c: KnowledgeCategory): Promise<void> => {
-    const name = prompt('重命名分类：', c.name)
-    if (name && name.trim() && name !== c.name) {
-      await window.dshw.knowledgeCategoryRename(c.id, name)
-      await refresh()
+    setCatDialog({ mode: 'rename', id: c.id, name: c.name })
+  }
+
+  const saveCategoryDialog = async (): Promise<void> => {
+    if (!catDialog || !catDialog.name.trim()) return
+    if (catDialog.mode === 'create') {
+      await window.dshw.knowledgeCategoryCreate(catDialog.name)
+    } else if (catDialog.id) {
+      await window.dshw.knowledgeCategoryRename(catDialog.id, catDialog.name)
     }
+    setCatDialog(null)
+    await refresh()
   }
 
   const deleteCategory = async (c: KnowledgeCategory): Promise<void> => {
@@ -159,6 +163,31 @@ export function KnowledgeBase(): JSX.Element {
           </div>
         </div>
       </div>
+
+      {/* 分类创建 / 重命名对话框 */}
+      <Dialog open={catDialog !== null} onOpenChange={(open) => !open && setCatDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{catDialog?.mode === 'rename' ? '重命名分类' : '新建分类'}</DialogTitle>
+            <DialogDescription>分类用于组织提炼的知识条目。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="分类名称"
+              value={catDialog?.name ?? ''}
+              onChange={(e) => setCatDialog((d) => (d ? { ...d, name: e.target.value } : d))}
+              onKeyDown={(e) => e.key === 'Enter' && void saveCategoryDialog()}
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setCatDialog(null)}>取消</Button>
+              <Button size="sm" variant="default" onClick={() => void saveCategoryDialog()} disabled={!catDialog?.name.trim()}>
+                保存
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

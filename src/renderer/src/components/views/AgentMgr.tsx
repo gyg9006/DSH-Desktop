@@ -48,12 +48,19 @@ export function AgentMgr(): JSX.Element {
     }
   }
 
-  const doRename = async (id: string): Promise<void> => {
-    const name = prompt('重命名 Agent：')
-    if (name && name.trim()) {
-      await window.dshw.agentRename(id, name)
-      await refresh()
-    }
+  const [renameTarget, setRenameTarget] = useState<AgentInfo | null>(null)
+  const [renameName, setRenameName] = useState('')
+
+  const doRename = (agent: AgentInfo): void => {
+    setRenameTarget(agent)
+    setRenameName(agent.name)
+  }
+
+  const saveRename = async (): Promise<void> => {
+    if (!renameTarget || !renameName.trim()) return
+    await window.dshw.agentRename(renameTarget.id, renameName)
+    setRenameTarget(null)
+    await refresh()
   }
 
   const doDelete = async (id: string, name: string): Promise<void> => {
@@ -153,7 +160,7 @@ export function AgentMgr(): JSX.Element {
               <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={(e) => { e.stopPropagation(); void doRun(a.id) }} disabled={runningId === a.id}>
                 {runningId === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} 运行
               </Button>
-              <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={(e) => { e.stopPropagation(); void doRename(a.id) }}>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={(e) => { e.stopPropagation(); doRename(a) }}>
                 <Pencil className="h-3 w-3" /> 重命名
               </Button>
               <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px] text-cyber-red" onClick={(e) => { e.stopPropagation(); void doDelete(a.id, a.name) }}>
@@ -199,6 +206,22 @@ export function AgentMgr(): JSX.Element {
           <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-cyber-border bg-cyber-bg p-3 font-mono text-[11px] leading-relaxed text-cyber-green">
             {log || '（空）'}
           </pre>
+        </DialogContent>
+      </Dialog>
+
+      {/* 重命名对话框 */}
+      <Dialog open={renameTarget !== null} onOpenChange={(open) => !open && setRenameTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>重命名 Agent</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input value={renameName} onChange={(e) => setRenameName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void saveRename()} autoFocus />
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setRenameTarget(null)}>取消</Button>
+              <Button size="sm" variant="default" onClick={() => void saveRename()} disabled={!renameName.trim()}>保存</Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

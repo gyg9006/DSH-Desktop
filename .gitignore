@@ -19,9 +19,8 @@ Thumbs.db
 *.tmp
 npm-debug.log*
 
-# 工作文件夹仅保留占位文件，业务数据不纳入版本控制
-workspace/*
-!workspace/.gitkeep
+# 工作文件夹（开发模式为交付版 workspace 的目录联接），业务数据不纳入版本控制
+workspace/
 
 # 截图目录（README 引用的真实界面截图）
 screenshots/*

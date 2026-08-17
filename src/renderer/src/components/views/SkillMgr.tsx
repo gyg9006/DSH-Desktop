@@ -8,6 +8,7 @@ import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
 import { Input } from '../ui/input'
 import { Switch } from '../ui/switch'
+import { Pagination } from '../ui/pagination'
 
 /**
  * 模块5：Skill 管理 —— Tab 切换 [插件市场] [技能市场] [已安装]。
@@ -98,6 +99,9 @@ function PluginMarket({
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<NpmPluginHitPayload[]>([])
   const [searched, setSearched] = useState(false)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
+  const pagedCurated = curated.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const doSearch = async (): Promise<void> => {
     if (!query.trim()) return
@@ -168,11 +172,11 @@ function PluginMarket({
 
       <div className="mb-1 text-[11px] font-medium text-cyber-dim">内置推荐插件（{curated.length}）</div>
       <div className="space-y-1.5">
-        {curated.map((p, i) => (
+        {pagedCurated.map((p, i) => (
           <div key={p.name} className="flex items-center justify-between gap-3 rounded-lg border border-cyber-border bg-cyber-panel/60 px-3 py-2">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                {i < 10 && <Badge variant="hot" className="px-1.5 text-[10px]">🔥 推荐</Badge>}
+                {(page - 1) * PAGE_SIZE + i < 10 && <Badge variant="hot" className="px-1.5 text-[10px]">🔥 推荐</Badge>}
                 <span className="text-xs font-semibold text-cyber-text">{p.title}</span>
                 {p.enabledInBundle && <Badge variant="green" className="px-1.5 text-[10px]">随 dsh 加载</Badge>}
                 {!p.enabledInBundle && p.enabledByUser && <Badge variant="default" className="px-1.5 text-[10px]">已启用</Badge>}
@@ -191,6 +195,7 @@ function PluginMarket({
           </div>
         ))}
       </div>
+      <Pagination total={curated.length} pageSize={PAGE_SIZE} page={page} onPage={setPage} />
     </div>
   )
 }
@@ -212,6 +217,9 @@ function SkillMarket({
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<Array<{ name: string; description: string; keywords: string[] }>>([])
   const [searched, setSearched] = useState(false)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
+  const pagedSkills = skills.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const doSearch = async (): Promise<void> => {
     if (!query.trim()) return
@@ -288,11 +296,11 @@ function SkillMarket({
 
       <div className="mb-1 text-[11px] font-medium text-cyber-dim">精选推荐技能（{skills.length}）</div>
       <div className="space-y-1.5">
-        {skills.map((s, i) => (
+        {pagedSkills.map((s, i) => (
           <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border border-cyber-border bg-cyber-panel/60 px-3 py-2">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                {i < 10 && <Badge variant="hot" className="px-1.5 text-[10px]">🔥 推荐</Badge>}
+                {(page - 1) * PAGE_SIZE + i < 10 && <Badge variant="hot" className="px-1.5 text-[10px]">🔥 推荐</Badge>}
                 <span className="text-xs font-semibold text-cyber-text">{s.name}</span>
                 {installedIds.has(s.id) && <Badge variant="green" className="px-1.5 text-[10px]">已安装</Badge>}
               </div>
@@ -308,6 +316,7 @@ function SkillMarket({
           </div>
         ))}
       </div>
+      <Pagination total={skills.length} pageSize={PAGE_SIZE} page={page} onPage={setPage} />
     </div>
   )
 }

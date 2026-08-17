@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import type { JSX } from 'react'
-import { Plus, Folder, Star, StarOff, Trash2, Pencil, ArrowLeft, ArrowUpRight } from 'lucide-react'
+import { Plus, Folder, Star, StarOff, Trash2, Pencil, ArrowLeft, ArrowUpRight, Download } from 'lucide-react'
 import type { SessionGroupInfo, SidebarDataPayload, WorkspaceEntryPayload } from '@shared/ipc'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
@@ -278,6 +278,14 @@ function GroupDetail({
     await window.dshw.setSessionFavorite(sessionId, fav)
     onChanged()
   }
+  const doExport = async (s: SessionItem): Promise<void> => {
+    const result = await window.dshw.exportSession(s.id, s.title || '会话')
+    if (result.ok && result.path) {
+      alert(`会话已导出到：${result.path}`)
+    } else if (!result.canceled) {
+      alert(result.error ?? '导出失败')
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -312,6 +320,9 @@ function GroupDetail({
                 <option key={g.id} value={g.id}>{g.name}</option>
               ))}
             </select>
+            <button aria-label="导出" className="rounded p-1 text-cyber-dim hover:text-cyber-neon" onClick={() => void doExport(s)}>
+              <Download className="h-3.5 w-3.5" />
+            </button>
             <button aria-label="删除" className="rounded p-1 text-cyber-dim hover:text-cyber-red" onClick={() => void doDelete(s.id)}>
               <Trash2 className="h-3.5 w-3.5" />
             </button>

@@ -21,6 +21,7 @@ export function SkillMgr(): JSX.Element {
   const [skills, setSkills] = useState<SkillMarketItem[]>([])
   const [installedSkills, setInstalledSkills] = useState<InstalledSkillInfo[]>([])
   const [busy, setBusy] = useState<string | null>(null)
+  const [tab, setTab] = useState('plugins')
 
   const refresh = useCallback(async (): Promise<void> => {
     const p = await window.dshw.getPlugins()
@@ -47,7 +48,7 @@ export function SkillMgr(): JSX.Element {
         </Button>
       </div>
 
-      <Tabs defaultValue="plugins" className="flex min-h-0 flex-1 flex-col">
+      <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
         <TabsList>
           <TabsTrigger value="plugins">插件市场</TabsTrigger>
           <TabsTrigger value="skills">技能市场</TabsTrigger>

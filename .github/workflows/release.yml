@@ -53,14 +53,14 @@ jobs:
         run: |
           $version = (Get-Content package.json | ConvertFrom-Json).version
           $tag = "v$version"
-          $body = @"
-## 🎉 DSH 桌面 v$version
-
-**把 DeepSeek Harness 装进一个文件夹 —— 双击即用 · 拷贝即迁移 · 零安装零残留**
-
-- 更新包：DSH-Desktop-v$version-win.zip（绿色免安装，解压后双击「启动 DSH 桌面.bat」即可使用）
-- 详细变更见 CHANGELOG.md 与项目 README
-"@
+          $body = @(
+            "🎉 DSH 桌面 v$version"
+            ""
+            "把 DeepSeek Harness 装进一个文件夹 —— 双击即用 · 拷贝即迁移 · 零安装零残留"
+            ""
+            "- 更新包：DSH-Desktop-v$version-win.zip（绿色免安装，解压后双击「启动 DSH 桌面.bat」即可使用）"
+            "- 详细变更见 CHANGELOG.md 与项目 README"
+          ) -join "`n"
           $release = gh release create $tag "DSH-Desktop-v$version-win.zip" --title "DSH 桌面 v$version" --notes $body
           Write-Output "Release created: $release"
         env:

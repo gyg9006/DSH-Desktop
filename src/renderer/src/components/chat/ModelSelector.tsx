@@ -63,20 +63,32 @@ export function ModelSelector(): JSX.Element {
   const select = async (m: SelectableModel): Promise<void> => {
     setCurrent(m)
     setOpen(false)
-    await window.dshw.modelsProviderSet({ providerId: m.providerId, patch: { defaultChat: m.label } })
-    toast(`默认对话模型：${m.providerName} / ${m.label}`, 'success')
+    const r = await window.dshw.modelsProviderSet({ providerId: m.providerId, patch: { defaultChat: m.label } })
+    // 同步到 dsh 对话（deepseek 为 dsh 默认通道时更新其默认模型）
+    if (m.providerId === 'deepseek') {
+      await window.dshw.setApiConfig({ model: m.label }).catch(() => undefined)
+    }
+    toast(r.ok ? `默认对话模型：${m.providerName} / ${m.label}` : (r.error ?? '保存失败'), r.ok ? 'success' : 'error')
+  }
+
+  /** 打开下拉前刷新最新配置（设置页改动即时生效）。 */
+  const toggle = async (): Promise<void> => {
+    if (!open) {
+      await refresh()
+    }
+    setOpen(!open)
   }
 
   if (!view) return <span className="h-7" />
 
-  const { list } = view && current ? { list: build(view).list } : { list: [] }
+  const list = build(view).list
   const cloud = list.filter((m) => m.region !== 'local')
   const local = list.filter((m) => m.region === 'local')
 
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => void toggle()}
         className="flex h-7 items-center gap-1.5 rounded-md border border-cyber-border bg-cyber-panel2 px-2 text-[11px] text-cyber-text transition-colors hover:border-cyber-neon/50"
       >
         {current?.region === 'local' ? (

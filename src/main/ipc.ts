@@ -44,7 +44,7 @@ import { startDshService, stopDshService, getServiceSnapshot, onServiceStatusCha
 import { listSessions, pinSession, deleteSession, importSessionsFrom, expandImportArchives } from './sessions'
 import { resetApp } from './reset'
 import { readSyncConfig, writeSyncConfig, syncPush, syncPull, syncForceRemote, syncForceLocal, syncSessionCount, isValidRemoteUrl } from './sync'
-import { readApiConfig, writeApiConfig, testApiConnection, discoverModels, syncApiToDsh, MODEL_LIST, validateProvider } from './apiConfig'
+import { readApiConfig, writeApiConfig, testApiConnection, discoverModels, syncApiToDsh, validateProvider } from './apiConfig'
 import {
   getPluginStates,
   setPluginEnabled,
@@ -390,8 +390,9 @@ export function registerIpcHandlers(): void {
     const safe: ApiConfigPayload = {}
     if (typeof patch?.apiKey === 'string') safe.apiKey = patch.apiKey
     if (typeof patch?.baseUrl === 'string') safe.baseUrl = patch.baseUrl
-    if (typeof patch?.model === 'string' && MODEL_LIST.some((m) => m.value === patch.model)) {
-      safe.model = patch.model
+    // 模型名放开为任意合法字符串（全域模型中心可配置任意模型），仅限长度防注入
+    if (typeof patch?.model === 'string' && patch.model.trim() && patch.model.length <= 100) {
+      safe.model = patch.model.trim()
     }
     if (patch?.proxy && typeof patch.proxy === 'object') safe.proxy = patch.proxy
     if (patch?.providers && typeof patch.providers === 'object' && !Array.isArray(patch.providers)) {

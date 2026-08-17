@@ -88,6 +88,7 @@ import { ensureGlobalRules, getRulesFilePath, saveGlobalRules } from './rules'
 import { getAllProviders, updateProviderConfig, updateCustomProvider, deleteCustomProvider, migrateLegacyApiConfig } from './provider-registry'
 import { saveApiKeySecure, readApiKeySecure, deleteApiKeySecure, maskKey } from './secure-storage'
 import { testAdapterConnection, listModelsFor } from './adapters'
+import { syncModelsConfigToDsh } from './modelsDshSync'
 import { listAgents, importAgent, renameAgent, deleteAgent, runAgent, collaborateAgents } from './agents'
 import {
   checkForUpdate,
@@ -875,6 +876,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.ModelsProviderSet, (_event, input: ModelsProviderSetInput) => {
     try {
       updateProviderConfig(getWorkspaceDir(), String(input?.providerId ?? ''), input?.patch ?? {})
+      syncModelsConfigToDsh(getWorkspaceDir())
       return { ok: true }
     } catch (error) {
       return { ok: false, error: String(error) }
@@ -883,6 +885,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.ModelsCustomUpsert, (_event, input: ModelsCustomUpsertInput) => {
     try {
       updateCustomProvider(getWorkspaceDir(), input)
+      syncModelsConfigToDsh(getWorkspaceDir())
       return { ok: true }
     } catch (error) {
       return { ok: false, error: String(error) }
@@ -892,6 +895,7 @@ export function registerIpcHandlers(): void {
     try {
       deleteCustomProvider(getWorkspaceDir(), String(id))
       deleteApiKeySecure(getWorkspaceDir(), String(id))
+      syncModelsConfigToDsh(getWorkspaceDir())
       return { ok: true }
     } catch (error) {
       return { ok: false, error: String(error) }
@@ -901,11 +905,13 @@ export function registerIpcHandlers(): void {
     const id = String(providerId ?? '')
     if (!id) return { ok: false, error: '缺少厂商 id' }
     saveApiKeySecure(getWorkspaceDir(), id, String(key ?? ''))
+    syncModelsConfigToDsh(getWorkspaceDir())
     const plain = readApiKeySecure(getWorkspaceDir(), id)
     return { ok: true, mask: plain ? maskKey(plain) : '' }
   })
   ipcMain.handle(IPC.ModelsKeyDelete, (_event, providerId: string) => {
     deleteApiKeySecure(getWorkspaceDir(), String(providerId ?? ''))
+    syncModelsConfigToDsh(getWorkspaceDir())
     return { ok: true }
   })
   ipcMain.handle(IPC.ModelsTest, async (_event, input: ModelsTestInput) => {
@@ -922,6 +928,7 @@ export function registerIpcHandlers(): void {
     try {
       const legacy = readApiConfig()
       migrateLegacyApiConfig(getWorkspaceDir(), legacy.apiKey, (id, k) => saveApiKeySecure(getWorkspaceDir(), id, k))
+      syncModelsConfigToDsh(getWorkspaceDir())
       return { ok: true }
     } catch (error) {
       return { ok: false, error: String(error) }

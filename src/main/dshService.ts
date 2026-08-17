@@ -14,6 +14,7 @@ import { getWorkspaceDir, readAppConfig, updateAppConfig } from './config'
 import { buildDshEnv } from './envCheck'
 import { runCommand, killProcessTree } from './utils/process'
 import { readApiConfig, buildProxyEnv } from './apiConfig'
+import { collectProviderEnv } from './modelsDshSync'
 import { repairSessionEncodings } from './sessions'
 import type { ServiceStatus } from '../shared/ipc'
 
@@ -234,6 +235,9 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
   // （dsh-credentials-local 受管文档，env > 文件 > .env，热重载），桌面端与 dsh Models 页
   // 共用同一份凭据，避免「输两遍」与 env 遮蔽文件编辑的问题。
   const apiConfig = readApiConfig()
+  // 全域模型中心：注入各已启用厂商的 API Key（DEEPSEEK_API_KEY / DSHW_PROVIDER_<ROUTE>）
+  const providerEnv = collectProviderEnv(workspaceDir)
+  for (const [k, v] of Object.entries(providerEnv)) env[k] = v
   // 代理（规格 6.20：注入所有子进程 env）
   const proxy = buildProxyEnv(apiConfig)
   for (const [k, v] of Object.entries(proxy.vars)) env[k] = v

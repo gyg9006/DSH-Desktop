@@ -21,6 +21,9 @@ let passed = 0, failed = 0
 const check = (n, c, d = '') => { if (c) { passed++; console.log('  ✅', n) } else { failed++; console.log('  ❌', n, d) } }
 
 await wait(5000)
+// 切到核心工作台（选择器依赖 DSHCore 挂载）
+await ev(`(() => { const b = [...document.querySelectorAll('aside button')].find(x => (x.title||'').includes('核心工作台')); if (b) b.click(); return 'ok'; })()`)
+await wait(800)
 // 场景：应用已在核心工作台（选择器 mount 时配置为空）→ 现在配置模型 → 直接打开选择器（不切视图）
 await ev(`window.dshw.modelsProviderSet({ providerId: 'deepseek', patch: { enabled: true, models: ['deepseek-chat', 'deepseek-reasoner'], defaultChat: 'deepseek-chat' } })`)
 await wait(400)

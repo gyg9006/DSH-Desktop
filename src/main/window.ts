@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import { logger } from './logger'
 import { getWindowStateFilePath } from './config'
 import { readJsonFile, writeJsonAtomic } from '../shared/workspace'
+import { getActiveThemeBackground } from './theme'
 import type { ThemeMode } from '../shared/ipc'
 
 const DEFAULT_WIDTH = 1280
@@ -87,9 +88,14 @@ function isStateVisible(state: WindowState): boolean {
   })
 }
 
-function backgroundColorFor(theme: ThemeMode): string {
+function backgroundColorFor(theme: ThemeMode, workspaceDir: string): string {
+  // 激活主题的背景色优先（客户端换肤全局生效）
+  try {
+    return getActiveThemeBackground(workspaceDir)
+  } catch {
+    /* fallthrough */
+  }
   if (theme === 'dark') return '#141414'
-  if (theme === 'light') return '#f5f6f8'
   return '#f5f6f8'
 }
 
@@ -106,7 +112,7 @@ export function createMainWindow(workspaceDir: string, theme: ThemeMode): Browse
     minHeight: MIN_HEIGHT,
     show: false,
     frame: false, // v2.0 自定义无边框标题栏
-    backgroundColor: backgroundColorFor(theme),
+    backgroundColor: backgroundColorFor(theme, workspaceDir),
     autoHideMenuBar: true,
     title: 'DSH 桌面',
     icon: fs.existsSync(iconPath) ? iconPath : undefined,

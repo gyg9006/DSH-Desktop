@@ -89,6 +89,8 @@ import { getAllProviders, updateProviderConfig, updateCustomProvider, deleteCust
 import { saveApiKeySecure, readApiKeySecure, deleteApiKeySecure, maskKey } from './secure-storage'
 import { testAdapterConnection, listModelsFor } from './adapters'
 import { syncModelsConfigToDsh } from './modelsDshSync'
+import { listThemes, getActiveTheme, setActiveTheme } from './theme'
+import { refreshTrayTheme } from './tray'
 import { listAgents, importAgent, renameAgent, deleteAgent, runAgent, collaborateAgents } from './agents'
 import {
   checkForUpdate,
@@ -933,6 +935,20 @@ export function registerIpcHandlers(): void {
     } catch (error) {
       return { ok: false, error: String(error) }
     }
+  })
+
+  // ===== v2.0：主题全局化 =====
+  ipcMain.handle(IPC.ThemeList, () => listThemes(getWorkspaceDir()))
+  ipcMain.handle(IPC.ThemeGet, () => getActiveTheme(getWorkspaceDir()))
+  ipcMain.handle(IPC.ThemeSet, (_event, id: string) => {
+    const theme = setActiveTheme(getWorkspaceDir(), String(id ?? 'default'))
+    if (!theme) return { ok: false, error: '主题不存在' }
+    // 托盘图标随主题切换（存在 tray-icon.png 时）
+    refreshTrayTheme(theme.hasTrayIcon ? path.join(theme.dir ?? '', 'tray-icon.png') : undefined)
+    // 广播给渲染层：全局应用新主题（CSS 变量 + theme.css 热切换）
+    const win = getMainWindow()
+    if (win && !win.isDestroyed()) win.webContents.send(IPC.ThemeEvent, theme)
+    return { ok: true, theme }
   })
 
   // ===== v2.0：Agent 管理 =====

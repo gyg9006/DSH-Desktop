@@ -47,12 +47,12 @@ check('Key 加密保存（返回掩码）', keyRr.ok === true && /sk-\*\*\*\*abc
 const maskCheck = await ev(`window.dshw.modelsGet().then(v => JSON.stringify(v.keyMasks.deepseek))`)
 check('Key 掩码展示（非明文）', /sk-\*\*\*\*/.test(maskCheck) && !maskCheck.includes('test1234'), maskCheck)
 
-// 5. 模型启用 + 默认模型 + 选择器
+// 5. 模型启用 + 默认模型（dsh 对话选择器由 dsh 界面呈现，此处验证配置同步）
 await ev(`window.dshw.modelsProviderSet({ providerId: 'deepseek', patch: { enabled: true, models: ['deepseek-chat', 'deepseek-reasoner'], defaultChat: 'deepseek-chat' } })`)
 await wait(600)
-await ev(`(() => { const b = [...document.querySelectorAll('aside button')].find(x => (x.title||'').includes('核心工作台')); if (b) b.click(); return 'ok'; })()`)
-await wait(800)
-check('模型选择器显示当前模型', await ev(`[...document.querySelectorAll('button')].some(b => b.innerText.includes('deepseek-chat'))`))
+const dsCfg = await ev(`window.dshw.modelsGet().then(v => JSON.stringify({ enabled: v.providers.deepseek?.enabled, models: v.providers.deepseek?.models?.length, def: v.providers.deepseek?.defaultChat }))`)
+const dsCfgR = JSON.parse(dsCfg)
+check('模型配置保存', dsCfgR.enabled === true && dsCfgR.models === 2 && dsCfgR.def === 'deepseek-chat', dsCfg)
 
 // 6. 连接测试（无有效 Key → 失败提示合理）
 const testR = await ev(`window.dshw.modelsTest({ providerId: 'deepseek', protocol: 'openai', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' }).then(r => JSON.stringify({ ok: r.ok, err: r.error }))`)

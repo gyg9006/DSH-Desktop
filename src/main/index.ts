@@ -15,6 +15,7 @@ import { stopDshService, isServiceRunning, startDshService, onServiceStatusChang
 import { ensureTray, refreshTrayMenu } from './tray'
 import { scheduleAutoBackup } from './backup'
 import { scheduleAutoUpdate, stopAutoUpdateSchedule } from './updater'
+import { syncNativeThemeFromActive } from './theme'
 
 app.setName('DSH 桌面')
 app.setAppUserModelId('com.dshworkbench.app')
@@ -66,6 +67,9 @@ if (!gotLock) {
 
     const workspaceDir = initializeRuntime()
     logger.info(`应用启动 v${app.getVersion()}，打包模式：${app.isPackaged ? '是' : '否'}${BACKGROUND_MODE ? '，后台模式' : ''}`)
+
+    // 主题全局化：启动时同步 nativeTheme（暗/亮随激活主题）
+    syncNativeThemeFromActive(workspaceDir)
 
     registerIpcHandlers()
     registerGlobalShortcuts()

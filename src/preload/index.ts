@@ -61,6 +61,8 @@ import type {
   ModelsCustomUpsertInput,
   ModelsTestInput,
   ModelsTestResult,
+  ThemeInfoPayload,
+  ActiveThemePayload,
   AgentsPayload,
   AgentImportResult,
   AgentRunResult,
@@ -402,6 +404,20 @@ const api = {
   modelsList: (input: ModelsTestInput): Promise<{ ok: boolean; models?: string[]; error?: string }> =>
     ipcRenderer.invoke(IPC.ModelsList, input),
   modelsMigrateLegacy: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke(IPC.ModelsMigrateLegacy),
+
+  // ===== v2.0：主题全局化 =====
+  themeList: (): Promise<ThemeInfoPayload[]> => ipcRenderer.invoke(IPC.ThemeList),
+  themeGet: (): Promise<ActiveThemePayload> => ipcRenderer.invoke(IPC.ThemeGet),
+  themeSet: (id: string): Promise<{ ok: boolean; theme?: ActiveThemePayload; error?: string }> =>
+    ipcRenderer.invoke(IPC.ThemeSet, id),
+  /** 订阅主题切换广播（全局应用）；返回取消订阅函数。 */
+  onThemeChanged: (callback: (theme: ActiveThemePayload) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, theme: ActiveThemePayload): void => callback(theme)
+    ipcRenderer.on(IPC.ThemeEvent, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.ThemeEvent, listener)
+    }
+  },
 
   // ===== v2.0：Agent 管理 =====
   agentsGet: (): Promise<AgentsPayload> => ipcRenderer.invoke(IPC.AgentsGet),

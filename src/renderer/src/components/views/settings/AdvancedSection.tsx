@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { JSX } from 'react'
 import { Cpu, Plug, Power, DatabaseBackup, RefreshCw, GitBranch, Loader2, CheckCircle2, XCircle } from 'lucide-react'
-import type { BackupSettingsPayload, EnvItem, SyncConfigPayload } from '@shared/ipc'
+import type { BackupSettingsPayload, EnvItem, InstallKey, SyncConfigPayload } from '@shared/ipc'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
@@ -23,6 +23,9 @@ export function AdvancedSection(): JSX.Element {
 function EnvCard(): JSX.Element {
   const [items, setItems] = useState<EnvItem[] | null>(null)
   const [busy, setBusy] = useState(false)
+  const [updating, setUpdating] = useState<InstallKey | null>(null)
+  const [progress, setProgress] = useState<number | null>(null)
+  const [installLog, setInstallLog] = useState('')
 
   const detect = async (): Promise<void> => {
     setBusy(true)
@@ -36,7 +39,30 @@ function EnvCard(): JSX.Element {
 
   useEffect(() => {
     void detect()
+    // 订阅安装进度（组件卸载时取消）
+    const unsubscribe = window.dshw.onInstallEvent((event) => {
+      if (event.phase === 'log') setInstallLog((prev) => (prev + '\n' + (event.message ?? '')).slice(-800))
+      else if (event.phase === 'progress') setProgress(event.percent ?? null)
+      else if (event.phase === 'done' || event.phase === 'error' || event.phase === 'cancelled') {
+        setUpdating(null)
+        setProgress(null)
+        void detect()
+      }
+    })
+    return unsubscribe
   }, [])
+
+  /** 一键更新到最新版（node/git/pnpm/dsh）。 */
+  const update = async (key: InstallKey): Promise<void> => {
+    if (!confirm(`一键更新 ${key === 'dsh' ? 'DeepSeek Harness（dsh）' : key} 到最新版？将下载便携版安装包并替换。`)) return
+    setUpdating(key)
+    setProgress(0)
+    setInstallLog('')
+    const result = await window.dshw.runInstall(key, 'update')
+    if (!result.ok && !result.cancelled) {
+      setInstallLog((prev) => (prev + '\n' + (result.error ?? '更新失败')).slice(-800))
+    }
+  }
 
   return (
     <Card>
@@ -44,11 +70,11 @@ function EnvCard(): JSX.Element {
         <CardTitle className="flex items-center gap-2">
           <Cpu className="h-4 w-4 text-cyber-neon" /> 环境检测
         </CardTitle>
-        <CardDescription>Node / npm / pnpm / Git / dsh 运行时状态。</CardDescription>
+        <CardDescription>Node / npm / pnpm / Git / dsh 运行时状态，支持一键更新到最新版。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-1.5">
         {(items ?? []).map((item) => (
-          <div key={item.key} className="flex items-center justify-between rounded-lg border border-cyber-border bg-cyber-panel2 px-3 py-2">
+          <div key={item.key} className="flex items-center justify-between gap-2 rounded-lg border border-cyber-border bg-cyber-panel2 px-3 py-2">
             <span className="flex items-center gap-2 text-xs text-cyber-text">
               {item.state === 'ok' ? (
                 <CheckCircle2 className="h-3.5 w-3.5 text-cyber-green" />
@@ -62,12 +88,40 @@ function EnvCard(): JSX.Element {
               <Badge variant={item.state === 'ok' ? 'green' : 'red'} className="px-1.5 text-[10px]">
                 {item.state === 'ok' ? '就绪' : item.state === 'missing' ? '缺失' : '异常'}
               </Badge>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-[10px]"
+                onClick={() => void update(item.key)}
+                disabled={updating !== null || item.state === 'missing'}
+              >
+                {updating === item.key ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                更新
+              </Button>
             </span>
           </div>
         ))}
-        <Button size="sm" variant="outline" onClick={() => void detect()} disabled={busy}>
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} 重新检测
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => void detect()} disabled={busy}>
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} 重新检测
+          </Button>
+          {updating && progress !== null && (
+            <div className="flex flex-1 items-center gap-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-cyber-panel2">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-cyber-neon to-cyber-violet transition-all"
+                  style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+                />
+              </div>
+              <span className="font-mono text-[10px] text-cyber-neon">{progress}%</span>
+            </div>
+          )}
+        </div>
+        {installLog && (
+          <pre className="max-h-28 overflow-y-auto whitespace-pre-wrap rounded-lg border border-cyber-border bg-cyber-bg p-2 font-mono text-[10px] leading-relaxed text-cyber-green">
+            {installLog}
+          </pre>
+        )}
       </CardContent>
     </Card>
   )

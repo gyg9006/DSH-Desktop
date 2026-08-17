@@ -89,6 +89,21 @@ function sleep(ms: number): Promise<void> {
 // 端口探测（规格 4.5 / 测试覆盖要求）
 // ---------------------------------------------------------------------------
 
+/** 动态解析 dsh 启动入口：读包 package.json 的 bin 字段（dsh 升级改结构后仍可用）。 */
+export function resolveDshBin(workspaceDir: string): string | null {
+  const pkgPath = path.join(workspaceDir, 'runtime', 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
+  try {
+    if (!fs.existsSync(pkgPath)) return null
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { bin?: string | Record<string, string> }
+    const bin = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.dsh
+    if (!bin) return null
+    const candidate = path.join(path.dirname(pkgPath), bin)
+    return fs.existsSync(candidate) ? candidate : null
+  } catch {
+    return null
+  }
+}
+
 /** 从 start 起探测第一个空闲端口（127.0.0.1）。 */
 export function probeFreePort(start = 3080, tries = 100): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -183,8 +198,10 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
   }
   const workspaceDir = getWorkspaceDir()
   const nodeExe = path.join(workspaceDir, 'runtime', 'node', 'node.exe')
-  const dshBin = path.join(workspaceDir, 'runtime', 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
-  if (!fs.existsSync(dshBin)) {
+  // dsh 启动入口动态解析（版本升级兼容）：读取 dsh 包 package.json 的 bin 字段，
+  // 避免硬编码 lib/bin.js 在 dsh 升级改包结构后失效。
+  const dshBin = resolveDshBin(workspaceDir)
+  if (!dshBin) {
     return { ok: false, error: '未安装 DeepSeek Harness（dsh）。请在「设置 → 环境检测」中一键安装' }
   }
   if (!fs.existsSync(nodeExe)) {

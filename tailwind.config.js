@@ -5,20 +5,20 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // 赛博朋克 / Tech-noir 色板（深色为主）
+        // 赛博朋克 / Tech-noir 色板（深色为主）——RGB 通道变量（支持 /opacity 修饰符，主题全局化）
         cyber: {
-          bg: '#0A0C12', // 全局背景
-          panel: '#10131C', // 面板 / 卡片
-          panel2: '#161A26', // 次级面板
-          border: '#1E2433', // 边框
-          neon: '#00E5FF', // 青色霓虹（主强调）
-          violet: '#8B5CF6', // 紫霓虹
-          pink: '#F0ABFC',
-          green: '#22E584', // 状态绿
-          red: '#FF4D6A', // 状态红 / 危险
-          amber: '#FFB020',
-          text: '#E6EAF2',
-          dim: '#8B93A7',
+          bg: 'rgb(var(--color-bg-rgb, 10 12 18) / <alpha-value>)',
+          panel: 'rgb(var(--color-panel-rgb, 16 19 28) / <alpha-value>)',
+          panel2: 'rgb(var(--color-panel2-rgb, 22 26 38) / <alpha-value>)',
+          border: 'rgb(var(--color-border-rgb, 30 36 51) / <alpha-value>)',
+          neon: 'rgb(var(--color-primary-rgb, 0 229 255) / <alpha-value>)',
+          violet: 'rgb(var(--color-secondary-rgb, 139 92 246) / <alpha-value>)',
+          pink: 'rgb(var(--color-accent-rgb, 240 171 252) / <alpha-value>)',
+          green: 'rgb(var(--color-green-rgb, 34 229 132) / <alpha-value>)',
+          red: 'rgb(var(--color-red-rgb, 255 77 106) / <alpha-value>)',
+          amber: 'rgb(var(--color-amber-rgb, 255 176 32) / <alpha-value>)',
+          text: 'rgb(var(--color-text-rgb, 230 234 242) / <alpha-value>)',
+          dim: 'rgb(var(--color-dim-rgb, 139 147 167) / <alpha-value>)',
           faint: '#5A6278'
         },
         // DeepSeek Harness 品牌蓝（保留兼容）

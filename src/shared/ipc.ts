@@ -126,6 +126,11 @@ export const IPC = {
   ModelsTest: 'models:test',
   ModelsList: 'models:list',
   ModelsMigrateLegacy: 'models:migrate-legacy',
+  // ===== v2.0：主题全局化 =====
+  ThemeList: 'theme:list',
+  ThemeGet: 'theme:get',
+  ThemeSet: 'theme:set',
+  ThemeEvent: 'theme:event',
   // ===== v2.0：Agent 管理 =====
   AgentsGet: 'agents:get',
   AgentImport: 'agents:import',
@@ -750,6 +755,28 @@ export interface ModelsTestResult {
   ok: boolean
   latencyMs?: number
   error?: string
+}
+
+// ===================== v2.0：主题全局化 =====================
+
+export interface ThemeInfoPayload {
+  id: string
+  name: string
+  version: string
+  author?: string
+  darkMode: boolean
+  isDefault: boolean
+  hasPreview: boolean
+}
+
+export interface ActiveThemePayload {
+  id: string
+  name: string
+  darkMode: boolean
+  tokens: Record<string, unknown>
+  css: string
+  dir: string | null
+  hasTrayIcon: boolean
 }
 
 // ===================== v2.0：Agent 管理 =====================

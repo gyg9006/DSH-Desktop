@@ -9,7 +9,6 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { Progress } from '../ui/progress'
 import { useToast } from '../ui/toast'
-import { ModelSelector } from '../chat/ModelSelector'
 import type { ExtractStepKey, KnowledgeCategory } from '@shared/ipc'
 
 /**
@@ -52,7 +51,6 @@ export function DSHCore(): JSX.Element {
           </Badge>
         )}
         <div className="flex-1" />
-        <ModelSelector />
         <Button size="sm" variant="ghost" onClick={() => void onImport('folder')} disabled={!running}>
           <FolderOpen className="h-3.5 w-3.5" /> 导入文件夹
         </Button>

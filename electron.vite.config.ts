@@ -1,5 +1,5 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
-import vue from '@vitejs/plugin-vue'
+import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
 
 // 使用 cwd 相对解析（electron-vite 以项目根为 cwd 执行）
@@ -28,6 +28,6 @@ export default defineConfig({
         ...sharedAlias
       }
     },
-    plugins: [vue()]
+    plugins: [react()]
   }
 })

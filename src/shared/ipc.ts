@@ -5,6 +5,10 @@
 
 export const IPC = {
   AppGetInfo: 'app:get-info',
+  WindowMinimize: 'window:minimize',
+  WindowMaximize: 'window:maximize',
+  WindowClose: 'window:close',
+  WindowIsMaximized: 'window:is-maximized',
   ConfigGet: 'config:get',
   ConfigSet: 'config:set',
   WorkspaceOpen: 'workspace:open',
@@ -95,7 +99,25 @@ export const IPC = {
   SyncPush: 'sync:push',
   SyncPull: 'sync:pull',
   SyncForceRemote: 'sync:force-remote',
-  SyncForceLocal: 'sync:force-local'
+  SyncForceLocal: 'sync:force-local',
+  // ===== v2.0：知识库 =====
+  KnowledgeGet: 'knowledge:get',
+  KnowledgeCategoryCreate: 'knowledge:categories:create',
+  KnowledgeCategoryRename: 'knowledge:categories:rename',
+  KnowledgeCategoryDelete: 'knowledge:categories:delete',
+  KnowledgeEntryCreate: 'knowledge:entries:create',
+  KnowledgeEntryUpdate: 'knowledge:entries:update',
+  KnowledgeEntryDelete: 'knowledge:entries:delete',
+  KnowledgeSearch: 'knowledge:search',
+  KnowledgeExtract: 'knowledge:extract',
+  KnowledgeIterate: 'knowledge:iterate',
+  // ===== v2.0：Agent 管理 =====
+  AgentsGet: 'agents:get',
+  AgentImport: 'agents:import',
+  AgentRename: 'agents:rename',
+  AgentDelete: 'agents:delete',
+  AgentRun: 'agents:run',
+  AgentsCollaborate: 'agents:collaborate'
 } as const
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
@@ -527,5 +549,121 @@ export interface UpdateDownloadResultPayload {
   ok: boolean
   canceled?: boolean
   path?: string
+  error?: string
+}
+
+// ===================== v2.0：知识库 =====================
+
+export interface KnowledgeCategory {
+  id: string
+  name: string
+  createdAt: number
+  /** 条目数（由主进程维护，方便卡片展示） */
+  entryCount: number
+}
+
+export interface KnowledgeEntry {
+  id: string
+  categoryId: string
+  title: string
+  content: string
+  /** AI 自动生成的关键词标签 */
+  tags: string[]
+  /** 来源会话 id（提炼入库时记录，可为空） */
+  sourceSessionId?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface KnowledgePayload {
+  categories: KnowledgeCategory[]
+  entries: KnowledgeEntry[]
+}
+
+export interface KnowledgeSearchQuery {
+  keyword?: string
+  categoryId?: string
+  /** 时间范围（ms 时间戳） */
+  from?: number
+  to?: number
+}
+
+export interface KnowledgeSearchResult {
+  ok: boolean
+  entries: KnowledgeEntry[]
+  error?: string
+}
+
+export interface KnowledgeExtractInput {
+  /** 会话内容快照（提炼来源） */
+  sessionText: string
+  sessionId?: string
+  /** 目标分类 id（无则返回提示需新建分类） */
+  categoryId?: string
+}
+
+export interface KnowledgeExtractResult {
+  ok: boolean
+  entries?: Array<Pick<KnowledgeEntry, 'title' | 'content' | 'tags'>>
+  /** 需要新建分类时为 false，UI 弹窗引导 */
+  needCategory?: boolean
+  error?: string
+}
+
+export interface KnowledgeIterateResult {
+  ok: boolean
+  /** 合并去重后的条目数变化 */
+  removed: number
+  merged: number
+  message: string
+  error?: string
+}
+
+// ===================== v2.0：Agent 管理 =====================
+
+export type AgentStatus = 'idle' | 'running' | 'error'
+
+export interface AgentInfo {
+  id: string
+  name: string
+  /** GitHub 仓库地址（https://github.com/owner/repo） */
+  repoUrl: string
+  description: string
+  status: AgentStatus
+  createdAt: number
+}
+
+export interface AgentsPayload {
+  agents: AgentInfo[]
+}
+
+export interface AgentImportInput {
+  /** GitHub URL，如 https://github.com/anthropics/superpowers */
+  url: string
+}
+
+export interface AgentImportResult {
+  ok: boolean
+  agent?: AgentInfo
+  error?: string
+}
+
+export interface AgentRunResult {
+  ok: boolean
+  /** 启动的会话/进程日志（骨架返回） */
+  log?: string
+  error?: string
+}
+
+export interface AgentCollaborateInput {
+  agentIds: string[]
+  /** 协同任务描述 */
+  task: string
+}
+
+export interface AgentCollaborateResult {
+  ok: boolean
+  /** 并行日志流（骨架） */
+  log: string
   error?: string
 }

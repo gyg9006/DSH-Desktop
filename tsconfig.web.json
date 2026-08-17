@@ -5,13 +5,15 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "types": ["node"],
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "useDefineForClassFields": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "baseUrl": ".",
     "paths": {
       "@renderer/*": ["src/renderer/src/*"],
@@ -20,7 +22,6 @@
   },
   "include": [
     "src/renderer/src/**/*",
-    "src/renderer/src/**/*.vue",
     "src/preload/index.d.ts",
     "src/shared/**/*"
   ]

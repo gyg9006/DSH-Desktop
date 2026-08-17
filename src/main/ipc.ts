@@ -16,12 +16,15 @@ import type {
   MigrateConflictPolicy,
   MigrateEvent,
   ProviderConfigPayload,
-  UiEventType
+  UiEventType,
+  KnowledgeSearchQuery,
+  KnowledgeExtractInput,
+  AgentCollaborateInput
 } from '../shared/ipc'
 import { logger } from './logger'
 import { getWorkspaceDir, getRootDir, readAppConfig, updateAppConfig } from './config'
 import { detectEnv } from './envCheck'
-import { getMainWindow } from './window'
+import { getMainWindow, minimizeMainWindow, toggleMaximizeMainWindow, closeMainWindow, isMainWindowMaximized } from './window'
 import { runInstall, cancelInstall, INSTALL_KEYS } from './installer'
 import {
   checkDshDataDir,
@@ -75,6 +78,8 @@ import {
   writeBackupSettings
 } from './backup'
 import { readAppLog, readDshLog, clearLogs, exportLogsZip } from './logs'
+import { getKnowledge, createKnowledgeCategory, renameKnowledgeCategory, deleteKnowledgeCategory, createKnowledgeEntry, updateKnowledgeEntry, deleteKnowledgeEntry, searchKnowledge, extractKnowledgeToStore, iterateKnowledge } from './knowledge'
+import { listAgents, importAgent, renameAgent, deleteAgent, runAgent, collaborateAgents } from './agents'
 import {
   checkForUpdate,
   downloadUpdate,
@@ -756,4 +761,92 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SyncPull, async () => syncPull())
   ipcMain.handle(IPC.SyncForceRemote, async () => syncForceRemote())
   ipcMain.handle(IPC.SyncForceLocal, async () => syncForceLocal())
+
+  // ===== v2.0：窗口控制（无边框标题栏） =====
+  ipcMain.handle(IPC.WindowMinimize, () => minimizeMainWindow())
+  ipcMain.handle(IPC.WindowMaximize, () => toggleMaximizeMainWindow())
+  ipcMain.handle(IPC.WindowClose, () => closeMainWindow())
+  ipcMain.handle(IPC.WindowIsMaximized, () => isMainWindowMaximized())
+
+  // ===== v2.0：知识库 =====
+  ipcMain.handle(IPC.KnowledgeGet, () => getKnowledge(getWorkspaceDir()))
+  ipcMain.handle(IPC.KnowledgeCategoryCreate, (_event, name: string) => {
+    try {
+      return { ok: true, category: createKnowledgeCategory(getWorkspaceDir(), String(name ?? '')) }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
+  ipcMain.handle(IPC.KnowledgeCategoryRename, (_event, id: string, name: string) => {
+    try {
+      return { ok: renameKnowledgeCategory(getWorkspaceDir(), String(id), String(name ?? '')) }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
+  ipcMain.handle(IPC.KnowledgeCategoryDelete, (_event, id: string) => {
+    try {
+      return { ok: deleteKnowledgeCategory(getWorkspaceDir(), String(id)) }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
+  ipcMain.handle(IPC.KnowledgeEntryCreate, (_event, categoryId: string, input: { title?: string; content?: string; tags?: string[] }) => {
+    try {
+      return { ok: true, entry: createKnowledgeEntry(getWorkspaceDir(), String(categoryId), {
+        title: String(input?.title ?? ''),
+        content: String(input?.content ?? ''),
+        tags: Array.isArray(input?.tags) ? input.tags.map(String) : []
+      }) }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
+  ipcMain.handle(IPC.KnowledgeEntryUpdate, (_event, id: string, patch: { title?: string; content?: string; tags?: string[] }) => {
+    try {
+      return { ok: updateKnowledgeEntry(getWorkspaceDir(), String(id), {
+        title: patch?.title !== undefined ? String(patch.title) : undefined,
+        content: patch?.content !== undefined ? String(patch.content) : undefined,
+        tags: Array.isArray(patch?.tags) ? patch.tags.map(String) : undefined
+      }) }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
+  ipcMain.handle(IPC.KnowledgeEntryDelete, (_event, id: string) => {
+    try {
+      return { ok: deleteKnowledgeEntry(getWorkspaceDir(), String(id)) }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
+  ipcMain.handle(IPC.KnowledgeSearch, (_event, query: KnowledgeSearchQuery) =>
+    searchKnowledge(getWorkspaceDir(), query ?? {})
+  )
+  ipcMain.handle(IPC.KnowledgeExtract, (_event, input: KnowledgeExtractInput) =>
+    extractKnowledgeToStore(getWorkspaceDir(), input ?? {})
+  )
+  ipcMain.handle(IPC.KnowledgeIterate, () => iterateKnowledge(getWorkspaceDir()))
+
+  // ===== v2.0：Agent 管理 =====
+  ipcMain.handle(IPC.AgentsGet, () => listAgents(getWorkspaceDir()))
+  ipcMain.handle(IPC.AgentImport, (_event, url: string) => importAgent(getWorkspaceDir(), String(url ?? '')))
+  ipcMain.handle(IPC.AgentRename, (_event, id: string, name: string) => {
+    try {
+      return { ok: renameAgent(getWorkspaceDir(), String(id), String(name ?? '')) }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
+  ipcMain.handle(IPC.AgentDelete, (_event, id: string) => {
+    try {
+      return { ok: deleteAgent(getWorkspaceDir(), String(id)) }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
+  })
+  ipcMain.handle(IPC.AgentRun, (_event, id: string) => runAgent(getWorkspaceDir(), String(id ?? '')))
+  ipcMain.handle(IPC.AgentsCollaborate, (_event, input: AgentCollaborateInput) =>
+    collaborateAgents(getWorkspaceDir(), input ?? {})
+  )
 }

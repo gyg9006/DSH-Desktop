@@ -43,7 +43,20 @@ import type {
   UpdateSettingsPayload,
   UpdateCheckResultPayload,
   UpdateEventPayload,
-  UpdateDownloadResultPayload
+  UpdateDownloadResultPayload,
+  KnowledgePayload,
+  KnowledgeCategory,
+  KnowledgeEntry,
+  KnowledgeSearchQuery,
+  KnowledgeSearchResult,
+  KnowledgeExtractInput,
+  KnowledgeExtractResult,
+  KnowledgeIterateResult,
+  AgentsPayload,
+  AgentImportResult,
+  AgentRunResult,
+  AgentCollaborateInput,
+  AgentCollaborateResult
 } from '../shared/ipc'
 
 const api = {
@@ -312,7 +325,48 @@ const api = {
     return () => {
       ipcRenderer.removeListener(IPC.UiEvent, listener)
     }
-  }
+  },
+
+  // ===== v2.0：窗口控制（无边框标题栏） =====
+  windowMinimize: (): Promise<void> => ipcRenderer.invoke(IPC.WindowMinimize),
+  windowToggleMaximize: (): Promise<boolean> => ipcRenderer.invoke(IPC.WindowMaximize),
+  windowClose: (): Promise<void> => ipcRenderer.invoke(IPC.WindowClose),
+  windowIsMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC.WindowIsMaximized),
+
+  // ===== v2.0：知识库 =====
+  knowledgeGet: (): Promise<KnowledgePayload> => ipcRenderer.invoke(IPC.KnowledgeGet),
+  knowledgeCategoryCreate: (name: string): Promise<{ ok: boolean; category?: KnowledgeCategory; error?: string }> =>
+    ipcRenderer.invoke(IPC.KnowledgeCategoryCreate, name),
+  knowledgeCategoryRename: (id: string, name: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.KnowledgeCategoryRename, id, name),
+  knowledgeCategoryDelete: (id: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.KnowledgeCategoryDelete, id),
+  knowledgeEntryCreate: (
+    categoryId: string,
+    input: { title?: string; content?: string; tags?: string[] }
+  ): Promise<{ ok: boolean; entry?: KnowledgeEntry; error?: string }> =>
+    ipcRenderer.invoke(IPC.KnowledgeEntryCreate, categoryId, input),
+  knowledgeEntryUpdate: (
+    id: string,
+    patch: { title?: string; content?: string; tags?: string[] }
+  ): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke(IPC.KnowledgeEntryUpdate, id, patch),
+  knowledgeEntryDelete: (id: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.KnowledgeEntryDelete, id),
+  knowledgeSearch: (query: KnowledgeSearchQuery): Promise<KnowledgeSearchResult> =>
+    ipcRenderer.invoke(IPC.KnowledgeSearch, query),
+  knowledgeExtract: (input: KnowledgeExtractInput): Promise<KnowledgeExtractResult> =>
+    ipcRenderer.invoke(IPC.KnowledgeExtract, input),
+  knowledgeIterate: (): Promise<KnowledgeIterateResult> => ipcRenderer.invoke(IPC.KnowledgeIterate),
+
+  // ===== v2.0：Agent 管理 =====
+  agentsGet: (): Promise<AgentsPayload> => ipcRenderer.invoke(IPC.AgentsGet),
+  agentImport: (url: string): Promise<AgentImportResult> => ipcRenderer.invoke(IPC.AgentImport, url),
+  agentRename: (id: string, name: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.AgentRename, id, name),
+  agentDelete: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke(IPC.AgentDelete, id),
+  agentRun: (id: string): Promise<AgentRunResult> => ipcRenderer.invoke(IPC.AgentRun, id),
+  agentsCollaborate: (input: AgentCollaborateInput): Promise<AgentCollaborateResult> =>
+    ipcRenderer.invoke(IPC.AgentsCollaborate, input)
 }
 
 export type DshwApi = typeof api

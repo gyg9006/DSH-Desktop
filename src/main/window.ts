@@ -29,6 +29,27 @@ export function getMainWindow(): BrowserWindow | null {
   return mainWindow
 }
 
+/** v2.0 无边框标题栏：窗口控制。 */
+export function minimizeMainWindow(): void {
+  mainWindow?.minimize()
+}
+
+export function toggleMaximizeMainWindow(): boolean {
+  const win = mainWindow
+  if (!win) return false
+  if (win.isMaximized()) win.unmaximize()
+  else win.maximize()
+  return win.isMaximized()
+}
+
+export function closeMainWindow(): void {
+  mainWindow?.close()
+}
+
+export function isMainWindowMaximized(): boolean {
+  return mainWindow?.isMaximized() ?? false
+}
+
 function readWindowState(): WindowState {
   const raw = readJsonFile(getWindowStateFilePath())
   if (!raw || typeof raw !== 'object') return {}
@@ -84,6 +105,7 @@ export function createMainWindow(workspaceDir: string, theme: ThemeMode): Browse
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     show: false,
+    frame: false, // v2.0 自定义无边框标题栏
     backgroundColor: backgroundColorFor(theme),
     autoHideMenuBar: true,
     title: 'DSH 桌面',

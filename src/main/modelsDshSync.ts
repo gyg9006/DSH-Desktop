@@ -51,14 +51,28 @@ export function syncModelsConfigToDsh(workspaceDir: string): { ok: boolean; erro
     // ---- llm-deepseek 段：官方提供方（含 models 目录） ----
     const ds = cfg.providers['deepseek']
     const dsPreset = PROVIDER_PRESETS.find((p) => p.id === 'deepseek')
-    const dsModels = ds?.enabled ? (ds.models ?? []) : []
+    // 优先级：桌面端显式配置的模型 > dsh 现有 models（用户/设置页配置，避免覆盖）> 预设默认
+    const existingDs = existing['llm-deepseek']
+    const existingDsModels =
+      existingDs && typeof existingDs === 'object' && !Array.isArray(existingDs)
+        ? (existingDs as Record<string, unknown>).models
+        : undefined
+    const dsMine = (ds?.models ?? []).filter((m) => typeof m === 'string' && m.trim())
+    let dsModels: Array<unknown>
     if (ds?.enabled) {
+      if (dsMine.length) {
+        dsModels = dsMine.map((m) => ({ id: m }))
+      } else if (Array.isArray(existingDsModels) && existingDsModels.length > 0) {
+        dsModels = existingDsModels // 保留 dsh 已配置的模型（不覆盖用户配置）
+      } else {
+        dsModels = (dsPreset?.defaultModels ?? []).map((m) => ({ id: m }))
+      }
       const section: Record<string, unknown> = {
         baseURL: ds.baseUrl?.trim() || dsPreset?.baseUrl || 'https://api.deepseek.com',
         apiKeyEnv: DEEPSEEK_API_KEY_ENV
       }
       if (dsModels.length > 0) {
-        section.models = dsModels.map((m) => ({ id: m }))
+        section.models = dsModels
       }
       existing['llm-deepseek'] = section
     } else {
@@ -70,7 +84,9 @@ export function syncModelsConfigToDsh(workspaceDir: string): { ok: boolean; erro
     for (const [id, pc] of Object.entries(cfg.providers)) {
       if (id === 'deepseek' || !pc.enabled) continue
       const preset = PROVIDER_PRESETS.find((p) => p.id === id)
-      const models = (pc.models ?? []).filter((m) => m.trim())
+      // 模型为空时同样用预设默认模型补齐（有预设才写；无预设且空模型则跳过）
+      const models = (pc.models?.length ? pc.models : (preset?.defaultModels ?? []))
+        .filter((m) => typeof m === 'string' && m.trim())
       if (models.length === 0) continue
       piProviders[id] = {
         displayName: preset?.name ?? id,
@@ -114,4 +130,38 @@ export function syncModelsConfigToDsh(workspaceDir: string): { ok: boolean; erro
 function writeYaml(file: string, obj: Record<string, unknown>): void {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, dumpYaml(obj), 'utf8')
+}
+
+/**
+ * 把模型中心已启用厂商的 Key 同步到 dsh 凭据文件（$DSH_HOME/.credentials.yaml）。
+ * dsh 凭据机制：env > 文件 > .env，且文件支持热重载——配置 Key 后无需重启服务，
+ * dsh 对话模型选择器立即显示该厂商模型。
+ */
+export function syncKeysToCredentials(workspaceDir: string): { ok: boolean; error?: string } {
+  try {
+    const cfg = readModelsConfig(workspaceDir)
+    const credFile = path.join(workspaceDir, 'data', '.credentials.yaml')
+    const existing = (loadYamlObject(fs.existsSync(credFile) ? fs.readFileSync(credFile, 'utf8') : '') ?? {}) as Record<string, unknown>
+    const next: Record<string, unknown> = { ...existing }
+    // deepseek → DEEPSEEK_API_KEY；其他厂商/自定义 → DSHW_PROVIDER_<ROUTE>
+    const providerIds = [
+      ...Object.entries(cfg.providers).filter(([, pc]) => pc.enabled).map(([id]) => id),
+      ...Object.values(cfg.customProviders).filter((c) => c.enabled).map((c) => c.id)
+    ]
+    for (const id of providerIds) {
+      const key = readApiKeySecure(workspaceDir, id)
+      const envRef = id === 'deepseek' ? DEEPSEEK_API_KEY_ENV : providerApiKeyEnv(id)
+      if (key) {
+        next[envRef] = key
+      } else {
+        delete next[envRef]
+      }
+    }
+    writeYaml(credFile, next)
+    logger.info('模型中心 Key 已同步到 dsh 凭据（热重载）')
+    return { ok: true }
+  } catch (error) {
+    logger.error(`Key 同步 dsh 凭据失败：${String(error)}`)
+    return { ok: false, error: String(error) }
+  }
 }

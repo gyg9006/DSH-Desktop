@@ -16,6 +16,7 @@ import { ensureTray, refreshTrayMenu } from './tray'
 import { scheduleAutoBackup } from './backup'
 import { scheduleAutoUpdate, stopAutoUpdateSchedule } from './updater'
 import { syncNativeThemeFromActive } from './theme'
+import { syncModelsConfigToDsh, syncKeysToCredentials } from './modelsDshSync'
 
 app.setName('DSH 桌面')
 app.setAppUserModelId('com.dshworkbench.app')
@@ -70,6 +71,13 @@ if (!gotLock) {
 
     // 主题全局化：启动时同步 nativeTheme（暗/亮随激活主题）
     syncNativeThemeFromActive(workspaceDir)
+    // 模型配置同步 dsh：启动即保证对话模型选择器有可选模型（服务启动前执行，幂等）
+    try {
+      syncModelsConfigToDsh(workspaceDir)
+      syncKeysToCredentials(workspaceDir)
+    } catch (error) {
+      logger.warn(`模型配置同步失败：${String(error)}`)
+    }
 
     registerIpcHandlers()
     registerGlobalShortcuts()

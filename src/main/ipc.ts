@@ -88,7 +88,7 @@ import { ensureGlobalRules, getRulesFilePath, saveGlobalRules } from './rules'
 import { getAllProviders, updateProviderConfig, updateCustomProvider, deleteCustomProvider, migrateLegacyApiConfig } from './provider-registry'
 import { saveApiKeySecure, readApiKeySecure, deleteApiKeySecure, maskKey } from './secure-storage'
 import { testAdapterConnection, listModelsFor } from './adapters'
-import { syncModelsConfigToDsh } from './modelsDshSync'
+import { syncModelsConfigToDsh, syncKeysToCredentials } from './modelsDshSync'
 import { listThemes, getActiveTheme, setActiveTheme } from './theme'
 import { refreshTrayTheme } from './tray'
 import { listAgents, importAgent, renameAgent, deleteAgent, runAgent, collaborateAgents } from './agents'
@@ -908,12 +908,14 @@ export function registerIpcHandlers(): void {
     if (!id) return { ok: false, error: '缺少厂商 id' }
     saveApiKeySecure(getWorkspaceDir(), id, String(key ?? ''))
     syncModelsConfigToDsh(getWorkspaceDir())
+    syncKeysToCredentials(getWorkspaceDir())
     const plain = readApiKeySecure(getWorkspaceDir(), id)
     return { ok: true, mask: plain ? maskKey(plain) : '' }
   })
   ipcMain.handle(IPC.ModelsKeyDelete, (_event, providerId: string) => {
     deleteApiKeySecure(getWorkspaceDir(), String(providerId ?? ''))
     syncModelsConfigToDsh(getWorkspaceDir())
+    syncKeysToCredentials(getWorkspaceDir())
     return { ok: true }
   })
   ipcMain.handle(IPC.ModelsTest, async (_event, input: ModelsTestInput) => {

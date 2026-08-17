@@ -78,6 +78,21 @@ if (!gotLock) {
     } catch (error) {
       logger.warn(`模型配置同步失败：${String(error)}`)
     }
+    // dsh 首次使用引导跳过：对 dsh web 页面（webview guest）注入通用脚本——
+    // 解除应用根 inert + 持续隐藏 onboarding 对话框（MutationObserver 覆盖 SPA 动态渲染）。
+    // 通用 DOM 定位（role=dialog + 引导文案），不依赖 dsh 具体版本结构，dsh 升级后依然生效；
+    // 配置 API Key 后 dsh 不再渲染引导，脚本无副作用。
+    app.on('web-contents-created', (_event, contents) => {
+      contents.on('did-finish-load', () => {
+        const url = contents.getURL()
+        if (!/^http:\/\/(localhost|127\.0\.0\.1):\d+\//.test(url)) return
+        try {
+          contents.executeJavaScript(SKIP_DSH_ONBOARDING_JS).catch(() => undefined)
+        } catch {
+          /* guest 未就绪，忽略 */
+        }
+      })
+    })
 
     registerIpcHandlers()
     registerGlobalShortcuts()
@@ -168,3 +183,27 @@ function registerGlobalShortcuts(): void {
     logger.warn(`全局快捷键注册失败：${String(error)}`)
   }
 }
+
+/**
+ * 跳过 dsh 首次使用引导（"保存并继续"对话框）。
+ * 解除应用根 inert + 持续隐藏 onboarding 模态；MutationObserver 覆盖 SPA 动态渲染。
+ */
+const SKIP_DSH_ONBOARDING_JS = `
+  (() => {
+    try {
+      const skip = () => {
+        try {
+          document.querySelectorAll('[inert]').forEach((el) => el.removeAttribute('inert'));
+          const HINTS = ['保存并继续', '稍后配置', 'Continue', 'Skip'];
+          const modal = [...document.querySelectorAll('[role="dialog"], [class*="modal" i]')].find((d) => {
+            const t = (d.textContent || '');
+            return HINTS.some((h) => t.includes(h)) && d.offsetParent !== null;
+          });
+          if (modal) { modal.style.display = 'none'; modal.style.visibility = 'hidden'; }
+        } catch (_) {}
+      };
+      skip();
+      new MutationObserver(skip).observe(document.body, { childList: true, subtree: true });
+    } catch (_) {}
+  })();
+`

@@ -1,0 +1,68 @@
+name: Release
+
+# 推送 vX.Y.Z tag 时自动：typecheck + 单测 + 打包绿色版 + 生成更新包 + 创建 GitHub Release 并上传资产。
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare deliverable dir (../DSH-Desktop)
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path "..\DSH-Desktop\app" | Out-Null
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Prepare bundled portable env
+        run: npm run prepare:env
+
+      - name: Build + package green dir
+        run: npm run pack:dir
+
+      - name: Generate update zip
+        run: node scripts/release.mjs
+
+      - name: Create GitHub Release + upload asset
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = "v$version"
+          $zip = "..\DSH-Desktop\DSH-Desktop-v$version-win.zip"
+          $shasums = "..\DSH-Desktop\SHA256SUMS"
+          Write-Output "zip exists: $(Test-Path $zip) at $(Resolve-Path $zip -ErrorAction SilentlyContinue)"
+          Write-Output "shasums exists: $(Test-Path $shasums)"
+          $body = @(
+            "🎉 DSH 桌面 v$version"
+            ""
+            "把 DeepSeek Harness 装进一个文件夹 —— 双击即用 · 拷贝即迁移 · 零安装零残留"
+            ""
+            "- 更新包：DSH-Desktop-v$version-win.zip（绿色免安装，解压后双击「启动 DSH 桌面.bat」即可使用）"
+            "- SHA256SUMS：更新包校验文件（客户端下载后自动校验）"
+            "- 详细变更见 CHANGELOG.md 与项目 README"
+          ) -join "`n"
+          $release = gh release create $tag $zip $shasums --title "DSH 桌面 v$version" --notes $body
+          Write-Output "Release created: $release"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

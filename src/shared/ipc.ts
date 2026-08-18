@@ -1,0 +1,926 @@
+/**
+ * 主进程 / preload / 渲染进程 共享的 IPC 通道名与数据类型。
+ * 渲染进程只能通过 preload 暴露的白名单 API 与主进程通信。
+ */
+
+export const IPC = {
+  AppGetInfo: 'app:get-info',
+  WindowMinimize: 'window:minimize',
+  WindowMaximize: 'window:maximize',
+  WindowClose: 'window:close',
+  WindowIsMaximized: 'window:is-maximized',
+  ConfigGet: 'config:get',
+  ConfigSet: 'config:set',
+  WorkspaceOpen: 'workspace:open',
+  WorkspaceRelocate: 'workspace:relocate',
+  WorkspaceRelocateEvent: 'workspace:relocate:event',
+  OpenPath: 'app:open-path',
+  OpenExternal: 'app:open-external',
+  LogReport: 'log:report',
+  EnvDetect: 'env:detect',
+  UiEvent: 'ui:event',
+  InstallRun: 'install:run',
+  InstallCancel: 'install:cancel',
+  InstallEvent: 'install:event',
+  ClipboardWrite: 'clipboard:write',
+  WorkspaceGetInfo: 'workspace:get-info',
+  WorkspaceSet: 'workspace:set',
+  WorkspaceChoose: 'workspace:choose',
+  MigrateScan: 'migrate:scan',
+  MigratePlan: 'migrate:plan',
+  MigrateRun: 'migrate:run',
+  MigrateCancel: 'migrate:cancel',
+  MigrateEvent: 'migrate:event',
+  AppRelaunch: 'app:relaunch',
+  ServiceStart: 'service:start',
+  ServiceStop: 'service:stop',
+  ServiceStatus: 'service:status',
+  ServiceEvent: 'service:event',
+  ServiceCleanup: 'service:cleanup',
+  SessionsList: 'sessions:list',
+  SessionsPin: 'sessions:pin',
+  SessionsDelete: 'sessions:delete',
+  SessionsImport: 'sessions:import',
+  ApiGet: 'api:get',
+  ApiSet: 'api:set',
+  ApiTest: 'api:test',
+  ApiDiscoverModels: 'api:discover-models',
+  PluginsGet: 'plugins:get',
+  PluginSetEnabled: 'plugins:set-enabled',
+  PluginSearch: 'plugins:search',
+  PluginInstall: 'plugins:install',
+  PluginUninstall: 'plugins:uninstall',
+  SkillsList: 'skills:list',
+  SkillsSearch: 'skills:search',
+  SkillInstall: 'skills:install',
+  SkillInstallNpm: 'skills:install-npm',
+  DshUiGet: 'dsh-ui:get',
+  DshUiSet: 'dsh-ui:set',
+  OpenSettingsFile: 'dsh-ui:open-settings-file',
+  WorkspacesGet: 'workspaces:get',
+  WorkspaceRename: 'workspaces:rename',
+  WorkspaceDelete: 'workspaces:delete',
+  SidebarDataGet: 'sidebar:data',
+  SessionGroupCreate: 'session-groups:create',
+  SessionGroupRename: 'session-groups:rename',
+  SessionGroupPin: 'session-groups:pin',
+  SessionGroupDelete: 'session-groups:delete',
+  SessionMoveToGroup: 'sessions:move-to-group',
+  SessionSetFavorite: 'sessions:set-favorite',
+  SessionRename: 'sessions:rename',
+  SessionFork: 'sessions:fork',
+  SessionArchive: 'sessions:archive',
+  SessionDeleteArchived: 'sessions:delete-archived',
+  SessionDeleteArchivedBatch: 'sessions:delete-archived-batch',
+  SessionDeleteBatch: 'sessions:delete-batch',
+  SessionUnarchive: 'sessions:unarchive',
+  SessionExport: 'sessions:export',
+  BackupCreate: 'backup:create',
+  BackupList: 'backup:list',
+  BackupRestore: 'backup:restore',
+  BackupDelete: 'backup:delete',
+  BackupExport: 'backup:export',
+  BackupSettingsGet: 'backup:settings:get',
+  BackupSettingsSet: 'backup:settings:set',
+  LogsRead: 'logs:read',
+  LogsClear: 'logs:clear',
+  LogsExport: 'logs:export',
+  AppCheckUpdate: 'app:check-update',
+  AppUpdateSettingsGet: 'app:update-settings:get',
+  AppUpdateSettingsSet: 'app:update-settings:set',
+  AppUpdateDownload: 'app:update:download',
+  AppUpdateCancel: 'app:update:cancel',
+  AppUpdateApply: 'app:update:apply',
+  UpdateEvent: 'app:update:event',
+  AppSetLoginItem: 'app:set-login-item',
+  DialogChooseDirectory: 'dialog:choose-directory',
+  DialogChooseFile: 'dialog:choose-file',
+  AppReset: 'app:reset',
+  SyncGet: 'sync:get',
+  SyncSet: 'sync:set',
+  SyncPush: 'sync:push',
+  SyncPull: 'sync:pull',
+  SyncForceRemote: 'sync:force-remote',
+  SyncForceLocal: 'sync:force-local',
+  SyncPreview: 'sync:preview',
+  SyncRun: 'sync:run',
+  SyncSettingsGet: 'sync:settings:get',
+  SyncSettingsSet: 'sync:settings:set',
+  SyncResolveConflict: 'sync:resolve-conflict',
+  // ===== v2.0：知识库 =====
+  KnowledgeGet: 'knowledge:get',
+  KnowledgeCategoryCreate: 'knowledge:categories:create',
+  KnowledgeCategoryRename: 'knowledge:categories:rename',
+  KnowledgeCategoryDelete: 'knowledge:categories:delete',
+  KnowledgeEntryCreate: 'knowledge:entries:create',
+  KnowledgeEntryUpdate: 'knowledge:entries:update',
+  KnowledgeEntryDelete: 'knowledge:entries:delete',
+  KnowledgeSearch: 'knowledge:search',
+  KnowledgeExtract: 'knowledge:extract',
+  KnowledgeIterate: 'knowledge:iterate',
+  KnowledgeExtractPipeline: 'knowledge:extract-pipeline',
+  KnowledgeExtractProgress: 'knowledge:extract-progress',
+  SessionGetRecentText: 'sessions:get-recent-text',
+  RulesGet: 'rules:get',
+  RulesSave: 'rules:save',
+  // ===== v2.0：全域模型对接中心 =====
+  ModelsGet: 'models:get',
+  ModelsProviderSet: 'models:provider:set',
+  ModelsCustomUpsert: 'models:custom:upsert',
+  ModelsCustomDelete: 'models:custom:delete',
+  ModelsKeySave: 'models:key:save',
+  ModelsKeyDelete: 'models:key:delete',
+  ModelsTest: 'models:test',
+  ModelsList: 'models:list',
+  ModelsMigrateLegacy: 'models:migrate-legacy',
+  // ===== v2.0：主题全局化 =====
+  ThemeList: 'theme:list',
+  ThemeGet: 'theme:get',
+  ThemeSet: 'theme:set',
+  ThemeEvent: 'theme:event',
+  ImageReadDataUrl: 'image:read-data-url',
+  ImageSaveSessionBg: 'image:save-session-bg',
+  // ===== v2.0：Agent 管理 =====
+  AgentsGet: 'agents:get',
+  AgentImport: 'agents:import',
+  AgentRename: 'agents:rename',
+  AgentDelete: 'agents:delete',
+  AgentRun: 'agents:run',
+  AgentsCollaborate: 'agents:collaborate'
+} as const
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+export type ThemeMode = 'light' | 'dark' | 'system'
+
+export type ServiceStatus = 'stopped' | 'starting' | 'running' | 'error'
+
+export type UiEventType = 'toggle-sidebar' | 'new-chat' | 'open-settings' | 'sidebar-data-changed' | 'sync-completed'
+
+export interface AppInfo {
+  appName: string
+  appVersion: string
+  electron: string
+  chrome: string
+  node: string
+  platform: NodeJS.Platform
+  arch: string
+  workspacePath: string
+  isPackaged: boolean
+}
+
+/** workspace/config/app.json 的结构（后续里程碑逐步扩充字段）。 */
+export interface AppConfig {
+  workspacePath?: string
+  onboarded?: boolean
+  theme?: ThemeMode
+  sidebarCollapsed?: boolean
+  [key: string]: unknown
+}
+
+export type EnvItemKey = 'node' | 'npm' | 'pnpm' | 'git' | 'dsh'
+
+export type EnvItemState = 'ok' | 'missing' | 'incompatible' | 'error'
+
+export interface EnvItem {
+  key: EnvItemKey
+  name: string
+  state: EnvItemState
+  version: string | null
+  /** 检测到的来源：便携版 / 系统 / 无 */
+  source: 'portable' | 'system' | 'none'
+  message?: string
+}
+
+export interface EnvReport {
+  items: EnvItem[]
+  checkedAt: string
+  summary: {
+    ok: number
+    missing: number
+    incompatible: number
+    error: number
+  }
+}
+
+export type InstallKey = 'node' | 'npm' | 'pnpm' | 'git' | 'dsh'
+
+export type InstallMode = 'install' | 'update'
+
+export interface InstallEvent {
+  key: InstallKey
+  phase: 'start' | 'log' | 'progress' | 'done' | 'error' | 'cancelled'
+  message?: string
+  /** 0-100；null 表示不确定进度（如解压/命令执行阶段） */
+  percent?: number | null
+  error?: string
+}
+
+export interface InstallResult {
+  ok: boolean
+  error?: string
+  cancelled?: boolean
+}
+
+/** 存量 dsh 数据扫描项（规格 6.8）。 */
+export type DshDataItemKey = 'sessions' | 'skills' | 'settings' | 'credentials' | 'profiles' | 'storages' | 'patch'
+
+export interface DshDataScanItem {
+  key: DshDataItemKey
+  label: string
+  sourcePath: string
+  /** 条目数：sessions=jsonl 数；skills=SKILL.md 数；profiles=profile 目录数；配置文件=0/1 */
+  count: number
+  exists: boolean
+  sizeBytes: number
+}
+
+export interface DshDataSource {
+  path: string
+  label: string
+  isWorkspaceData: boolean
+  items: DshDataScanItem[]
+  totalSessions: number
+  totalSkills: number
+}
+
+export type MigrateConflictPolicy = 'overwrite' | 'skip' | 'rename'
+
+export interface MigrateResult {
+  ok: boolean
+  error?: string
+  cancelled?: boolean
+  copied: number
+  skipped: number
+  renamed: number
+  overwritten: number
+}
+
+export interface MigratePlan {
+  entryCount: number
+  conflicts: string[]
+}
+
+export interface MigrateEvent {
+  phase: 'log' | 'progress' | 'done' | 'error' | 'cancelled'
+  message?: string
+  done?: number
+  total?: number
+  error?: string
+}
+
+/** 数据目录自检结果（规格 4.4：DSH_HOME 策略下每次启动校验 workspace/data）。 */
+export interface DshDataDirStatus {
+  path: string
+  status: 'ok' | 'missing' | 'unwritable'
+  exists: boolean
+  writable: boolean
+}
+
+export interface WorkspaceInfo {
+  workspacePath: string
+  dataDir: DshDataDirStatus
+}
+
+export interface WorkspaceSetResult {
+  ok: boolean
+  error?: string
+  restartRequired?: boolean
+}
+
+/** 工作文件夹迁移事件（需求二：流式复制 + 校验 + 原子切换 + 回滚）。 */
+export interface RelocateEventPayload {
+  phase: 'log' | 'progress' | 'done' | 'error' | 'cancelled'
+  done?: number
+  total?: number
+  message?: string
+  error?: string
+}
+
+/** 会话列表条目（规格 5.2）。 */
+export interface SessionEntry {
+  id: string
+  title: string
+  time: number
+  path: string
+  pinned: boolean
+}
+
+export interface ServiceSnapshot {
+  status: ServiceStatus
+  port: number | null
+  pid: number | null
+  log: string[]
+}
+
+/** 自定义提供方（同步到 dsh 的 llm-pi-ai 段）。 */
+export interface ProviderConfigPayload {
+  /** 显示名称（dsh Models 页展示）。 */
+  displayName?: string
+  /** 线缆协议：默认 openai-completions。 */
+  api?: 'openai-completions' | 'openai-responses' | 'anthropic-messages'
+  baseUrl?: string
+  apiKey?: string
+  /** 模型 id 列表（手声明路由必填 ≥1）。 */
+  models?: string[]
+}
+
+/** 模型与 API 配置（workspace/config/api.json）。 */
+export interface ApiConfigPayload {
+  apiKey?: string
+  baseUrl?: string
+  model?: string
+  proxy?: {
+    mode: 'none' | 'system' | 'manual'
+    http?: string
+    https?: string
+    socks5?: string
+  }
+  /** 自定义提供方，key = 路由名（如 acme-gateway）。 */
+  providers?: Record<string, ProviderConfigPayload>
+}
+
+/** 从端点获取的模型列表（dsh 的 discoverModels 同源：GET {baseURL}/models）。 */
+export interface ApiDiscoverResult {
+  ok: boolean
+  models?: string[]
+  error?: string
+}
+
+/** 功能插件状态（内置、可启用）。 */
+export interface PluginStatePayload {
+  id: string
+  name: string
+  title: string
+  description: string
+  tags: string[]
+  enabledInBundle: boolean
+  enabledByUser: boolean
+}
+
+/** 已安装插件（profile 的 pnpm dependencies）。 */
+export interface InstalledPluginPayload {
+  name: string
+  version: string
+  /** 声明 dsh.bundle（安装后自动成为 profile 层）。 */
+  bundle: boolean
+  enabled: boolean
+}
+
+/** npm 搜索结果条目。 */
+export interface NpmPluginHitPayload {
+  name: string
+  version: string
+  description: string
+  author?: string
+  keywords: string[]
+  date: string
+  url?: string
+}
+
+export interface PluginsPayload {
+  curated: PluginStatePayload[]
+  installed: InstalledPluginPayload[]
+}
+
+/** Agent 预设（dsh-agent-presets：目录名 = 预设 id，preset.yml 提供显示文本）。 */
+export interface AgentPresetInfo {
+  id: string
+  name: string
+  description?: string
+  /** true = 随 dsh 安装（只读）；false = 用户自建（$DSH_HOME/.agent-presets）。 */
+  shipped: boolean
+}
+
+/** 通用设置（同步到 dsh settings.yaml 的 locale / ui-theme / agent-presets 命名空间）。 */
+export interface DshUiSettingsPayload {
+  locale?: 'zh' | 'en'
+  theme?: 'light' | 'dark' | 'system'
+  defaultAgentPreset?: string
+  /** 桌面端是否显示 dsh 内置侧边栏（应用配置）。 */
+  showDshSidebar?: boolean
+}
+
+export interface DshUiSettingsResult {
+  locale: 'zh' | 'en'
+  theme: 'light' | 'dark' | 'system'
+  defaultAgentPreset: string
+  showDshSidebar: boolean
+  presets: AgentPresetInfo[]
+}
+
+/** 推荐技能（来自知名开源技能库，如 anthropics/skills、obra/superpowers）。 */
+export interface SkillMarketItem {
+  id: string
+  name: string
+  description: string
+  tags: string[]
+  /** 来源：GitHub 仓库路径 / npm 包 / npm 技能合集内的单个技能。 */
+  source:
+    | { type: 'github'; repo: string; path: string }
+    | { type: 'npm'; pkg: string }
+    | { type: 'npm-skill'; pkg: string; skill: string }
+  /** 是否社区强烈推荐（绿色标签）。 */
+  recommended: boolean
+  /** 已安装 */
+  installed: boolean
+}
+
+export interface InstalledSkillInfo {
+  id: string
+  path: string
+  sizeBytes: number
+  mtime: number
+}
+
+/** 工作区树（对应 dsh 侧边栏的工作区视图）。 */
+export interface WorkspaceSessionEntry {
+  id: string
+  title: string
+  time: number
+  /** 空会话（dsh 不展示，侧边栏过滤） */
+  blank?: boolean
+}
+
+export interface WorkspaceEntryPayload {
+  id: string
+  title: string
+  path: string
+  /** 会话数 */
+  sessionCount: number
+  sessions: WorkspaceSessionEntry[]
+}
+
+export interface WorkspacesPayload {
+  workspaces: WorkspaceEntryPayload[]
+  /** 当前工作区（应用配置的 workspacePath 对应的工作区 id，无则 null）。 */
+  currentId: string | null
+}
+
+/** 对话分组（桌面端管理）。 */
+export interface SessionGroupInfo {
+  id: string
+  name: string
+  workspaceId: string
+  pinned: boolean
+}
+
+/** 归档会话条目。 */
+export interface ArchivedSessionEntry {
+  sessionId: string
+  title: string
+  /** 会话时间戳（ms） */
+  time: number
+  /** 归档时间戳（ms） */
+  archivedAt: number
+  /** 关键字（标题分词 + 人工标注） */
+  keywords: string[]
+  /** 分组 id（可选） */
+  groupId: string | null
+  /** 收藏 */
+  favorite: boolean
+  /** 归档前所在工作区路径（还原到工作区时使用） */
+  workspacePath?: string
+  /** 归档前所在工作区 id */
+  workspaceId?: string
+}
+
+/** 侧边栏会话视图的完整数据。 */
+export interface SidebarDataPayload {
+  workspaces: WorkspaceEntryPayload[]
+  groups: SessionGroupInfo[]
+  archived: ArchivedSessionEntry[]
+  favorites: string[]
+  /** sessionId → groupId（未分组为 null） */
+  groupMap: Record<string, string | null>
+}
+
+export interface SessionOpResult {
+  ok: boolean
+  error?: string
+  /** fork 产生的新会话 id */
+  forkedId?: string
+  /** 批量操作成功数量 */
+  count?: number
+}
+
+export interface BackupEntryPayload {
+  name: string
+  path: string
+  sizeBytes: number
+  mtime: number
+}
+
+export interface BackupSettingsPayload {
+  enabled?: boolean
+  period?: 'daily' | 'weekly'
+  keep?: number
+  lastAt?: number
+}
+
+export interface LogsPayload {
+  app: string[]
+  dsh: string[]
+}
+
+export interface SyncConfigPayload {
+  remoteUrl?: string
+  branch?: string
+  lastSyncAt?: number
+}
+
+export interface SyncResultPayload {
+  ok: boolean
+  error?: string
+  pushed?: number
+  pulled?: number
+  /** true = 同步冲突（rebase 失败），UI 据此显示「以远端/本地为准」操作 */
+  conflict?: boolean
+}
+
+// ===================== v2.0 扩展：智能同步（Git 时间戳比对） =====================
+
+export type SyncMode = 'smart' | 'force' | 'add-only'
+
+export type SyncFileStatus = 'upload' | 'download' | 'skip' | 'conflict'
+
+/** 同步预览中的单个文件条目（rel 为相对工作文件夹路径，如 data/sessions/x/session.jsonl）。 */
+export interface SyncFileItem {
+  rel: string
+  status: SyncFileStatus
+  /** 本地最后修改时间（ms）；本地不存在为 null */
+  localTime: number | null
+  /** 远程最后提交时间（ms）；远程不存在为 null */
+  remoteTime: number | null
+  /** 文件大小（字节） */
+  size: number
+  reason?: string
+}
+
+export interface SyncPreviewPayload {
+  ok: boolean
+  error?: string
+  items: SyncFileItem[]
+  stats: { total: number; upload: number; download: number; skip: number; conflict: number }
+  mode: SyncMode
+  toleranceMs: number
+  fetchedAt: number
+}
+
+/** 智能同步策略（存 config/sync.json 的 smart 键）。 */
+export interface SyncSettingsPayload {
+  /** 同步模式：smart=智能比对（默认） / force=强制覆盖 / add-only=仅新增不覆盖 */
+  mode?: SyncMode
+  /** 时间容差（ms），默认 2000（Windows 文件系统 2 秒精度） */
+  toleranceMs?: number
+  /** 排除规则（.gitignore 语法，相对工作文件夹路径） */
+  exclude?: string[]
+  /** 自动同步间隔（分钟）；0 或未设置 = 关闭 */
+  autoSyncMinutes?: number
+}
+
+export interface SyncRunInput {
+  /** 参与同步的文件 rel 列表（由预览面板勾选） */
+  selection: string[]
+  direction: 'push' | 'pull'
+  mode?: SyncMode
+}
+
+/** 更新模式：auto=自动检测并下载；manual=仅手动检查。 */
+export type UpdateMode = 'auto' | 'manual'
+
+export interface UpdateSettingsPayload {
+  mode: UpdateMode
+  /** 最近一次检查时间（ms） */
+  lastCheckAt?: number
+  /** 已检查到的远端版本（防止重复提示） */
+  lastVersion?: string
+  /** 已忽略的版本（稍后提醒后不再提示） */
+  dismissedVersion?: string
+  /** 下载分片线程数（默认 4） */
+  threads?: number
+  /** 自定义镜像前缀列表（如 https://ghproxy.com/） */
+  mirrors?: string[]
+}
+
+export interface UpdateCheckResultPayload {
+  ok: boolean
+  current: string
+  hasUpdate: boolean
+  latest?: string
+  message: string
+  notes?: string
+  /** 更新包（zip）的 asset id，下载时用 */
+  assetId?: number
+  /** 更新包文件名 */
+  assetName?: string
+  /** 更新包大小（字节） */
+  size?: number
+  /** 下载地址（GitHub 网页地址，仅展示用） */
+  downloadUrl?: string
+  /** 更新包直链（browser_download_url，下载加速用） */
+  browserUrl?: string
+  /** SHA256SUMS 校验文件地址（发布侧随包上传） */
+  checksumUrl?: string
+}
+
+export type UpdateEventPhase =
+  | 'checking'
+  | 'found'
+  | 'none'
+  | 'downloading'
+  | 'downloaded'
+  | 'applying'
+  | 'error'
+
+export interface UpdateEventPayload {
+  phase: UpdateEventPhase
+  percent?: number
+  message?: string
+  version?: string
+  error?: string
+}
+
+export interface UpdateDownloadResultPayload {
+  ok: boolean
+  canceled?: boolean
+  path?: string
+  error?: string
+}
+
+// ===================== v2.0：知识库 =====================
+
+export interface KnowledgeCategory {
+  id: string
+  name: string
+  createdAt: number
+  /** 条目数（由主进程维护，方便卡片展示） */
+  entryCount: number
+}
+
+export interface KnowledgeEntry {
+  id: string
+  categoryId: string
+  title: string
+  content: string
+  /** AI 自动生成的关键词标签 */
+  tags: string[]
+  /** 来源会话 id（提炼入库时记录，可为空） */
+  sourceSessionId?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface KnowledgePayload {
+  categories: KnowledgeCategory[]
+  entries: KnowledgeEntry[]
+}
+
+export interface KnowledgeSearchQuery {
+  keyword?: string
+  categoryId?: string
+  /** 时间范围（ms 时间戳） */
+  from?: number
+  to?: number
+}
+
+export interface KnowledgeSearchResult {
+  ok: boolean
+  entries: KnowledgeEntry[]
+  error?: string
+}
+
+export interface KnowledgeExtractInput {
+  /** 会话内容快照（提炼来源） */
+  sessionText: string
+  sessionId?: string
+  /** 目标分类 id（无则返回提示需新建分类） */
+  categoryId?: string
+}
+
+export interface KnowledgeExtractResult {
+  ok: boolean
+  entries?: Array<Pick<KnowledgeEntry, 'title' | 'content' | 'tags'>>
+  /** 需要新建分类时为 false，UI 弹窗引导 */
+  needCategory?: boolean
+  error?: string
+}
+
+export interface KnowledgeIterateResult {
+  ok: boolean
+  /** 合并去重后的条目数变化 */
+  removed: number
+  merged: number
+  message: string
+  error?: string
+}
+
+// ===================== v2.0：一键智能提炼流水线 =====================
+
+export type ExtractStepKey =
+  | 'distill' // 预处理与蒸馏 session-distiller
+  | 'extract' // 代码萃取 code-snippet-extractor
+  | 'vector' // 语义向量化 vector-embedder
+  | 'refine' // 去重合并 knowledge-refiner
+  | 'archive' // 归档索引 markdown-archiver
+
+export interface KnowledgePipelineInput {
+  /** 会话内容快照（提炼来源） */
+  sessionText: string
+  sessionId?: string
+  categoryId?: string
+}
+
+export interface KnowledgePipelineProgress {
+  step: ExtractStepKey
+  /** 0-100 */
+  percent: number
+  message: string
+}
+
+export interface KnowledgePipelineResult {
+  ok: boolean
+  /** 落库条目（可能有多个） */
+  saved?: number
+  merged?: number
+  categoryName?: string
+  /** 生成的 markdown 文件路径 */
+  files?: string[]
+  /** 失败步骤（如 'vector'） */
+  failedStep?: ExtractStepKey | null
+  error?: string
+  /** 需要新建分类 */
+  needCategory?: boolean
+  /** 流水线日志（每步摘要） */
+  log: string[]
+}
+
+export interface RecentSessionTextResult {
+  ok: boolean
+  /** 会话标题 */
+  title?: string
+  /** 会话文本（截断至 maxChars） */
+  text?: string
+  error?: string
+}
+
+// ===================== v2.0：全域模型对接中心 =====================
+
+export type ProviderRegion = 'international' | 'china' | 'local'
+export type ProviderProtocol = 'openai' | 'anthropic' | 'ollama'
+
+export interface ModelProviderPreset {
+  id: string
+  name: string
+  region: ProviderRegion
+  protocol: ProviderProtocol
+  baseUrl: string
+  defaultModels: string[]
+  keyRequired: boolean
+  docs?: string
+}
+
+export interface ModelProviderConfig {
+  enabled: boolean
+  baseUrl?: string
+  models: string[]
+  defaultChat?: string
+  defaultExtract?: string
+  defaultEmbedding?: string
+}
+
+export interface CustomProviderPayload {
+  id: string
+  name: string
+  baseUrl: string
+  protocol: ProviderProtocol
+  models: string[]
+  enabled: boolean
+}
+
+export interface ModelsViewPayload {
+  presets: ModelProviderPreset[]
+  custom: CustomProviderPayload[]
+  providers: Record<string, ModelProviderConfig>
+  /** providerId -> Key 掩码（sk-****abcd）；无则空串 */
+  keyMasks: Record<string, string>
+}
+
+export interface ModelsProviderSetInput {
+  providerId: string
+  patch: Partial<ModelProviderConfig>
+}
+
+export interface ModelsCustomUpsertInput {
+  id: string
+  name: string
+  baseUrl: string
+  protocol?: ProviderProtocol
+  models?: string[]
+  enabled?: boolean
+}
+
+export interface ModelsTestInput {
+  providerId: string
+  protocol: ProviderProtocol
+  baseUrl: string
+  model?: string
+}
+
+export interface ModelsTestResult {
+  ok: boolean
+  latencyMs?: number
+  error?: string
+}
+
+// ===================== v2.0：主题全局化 =====================
+
+export interface ThemeInfoPayload {
+  id: string
+  name: string
+  version: string
+  author?: string
+  darkMode: boolean
+  isDefault: boolean
+  hasPreview: boolean
+}
+
+export interface ActiveThemePayload {
+  id: string
+  name: string
+  darkMode: boolean
+  tokens: Record<string, unknown>
+  css: string
+  dir: string | null
+  hasTrayIcon: boolean
+}
+
+// ===================== v2.0：会话背景（需求五） =====================
+
+export type SessionBgType = 'theme' | 'color' | 'gradient' | 'image'
+
+export interface SessionBackgroundPayload {
+  /** theme=跟随主题（默认）/ color=纯色 / gradient=渐变 / image=自定义图片 */
+  type: SessionBgType
+  /** 纯色值（HEX/RGB，type=color） */
+  color?: string
+  /** 渐变颜色列表（type=gradient，如 ['#0f172a', '#1e1b4b']） */
+  gradient?: string[]
+  /** 图片相对工作文件夹路径（type=image，如 data/session-bg/x.webp） */
+  imagePath?: string
+  /** 填充模式：cover / contain / fill */
+  fit?: 'cover' | 'contain' | 'fill'
+  /** 透明度叠加 0-1（默认 1） */
+  opacity?: number
+  /** 模糊度 0-20px（默认 0） */
+  blur?: number
+}
+
+// ===================== v2.0：Agent 管理 =====================
+
+export type AgentStatus = 'idle' | 'running' | 'error'
+
+export interface AgentInfo {
+  id: string
+  name: string
+  /** GitHub 仓库地址（https://github.com/owner/repo） */
+  repoUrl: string
+  description: string
+  status: AgentStatus
+  createdAt: number
+}
+
+export interface AgentsPayload {
+  agents: AgentInfo[]
+}
+
+export interface AgentImportInput {
+  /** GitHub URL，如 https://github.com/anthropics/superpowers */
+  url: string
+}
+
+export interface AgentImportResult {
+  ok: boolean
+  agent?: AgentInfo
+  error?: string
+}
+
+export interface AgentRunResult {
+  ok: boolean
+  /** 启动的会话/进程日志（骨架返回） */
+  log?: string
+  error?: string
+}
+
+export interface AgentCollaborateInput {
+  agentIds: string[]
+  /** 协同任务描述 */
+  task: string
+}
+
+export interface AgentCollaborateResult {
+  ok: boolean
+  /** 并行日志流（骨架） */
+  log: string
+  error?: string
+}

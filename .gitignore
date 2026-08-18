@@ -1,0 +1,36 @@
+# 依赖与构建产物
+node_modules/
+out/
+dist/
+app/
+_electron-cache/
+_electron-builder-cache/
+electron-vite-cache/
+vite.config.*.timestamp-*.mjs
+
+# 打包输出（交付目录在源码仓库之外）
+../DSH-Desktop/
+../DSH-Workbench/
+
+# 日志与临时文件
+*.log
+.DS_Store
+Thumbs.db
+*.tmp
+npm-debug.log*
+
+# 工作文件夹（开发模式为交付版 workspace 的目录联接），业务数据不纳入版本控制
+workspace/
+
+# 打包内置便携环境（构建期由 prepare:env 下载生成；CI 在打包前重新准备）
+resources/portable-env/
+
+# 截图目录（README 引用的真实界面截图）
+screenshots/*
+!screenshots/*.png
+!screenshots/.gitkeep
+
+# 编辑器
+.vscode/*
+!.vscode/extensions.json
+.idea/

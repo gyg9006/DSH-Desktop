@@ -1,0 +1,134 @@
+# 更新日志（CHANGELOG）
+
+本项目的所有显著变更都会记录在此文件中。
+格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
+版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+## [2.1.0] - 2026-08-18
+
+### 新增（体验优化专项，6 项）
+
+1. **首次启动三步引导 + 白屏修复**：独立渲染的引导向导（工作文件夹 → 环境检测/一键安装 → API Key 配置并测试），入口守卫（`onboarded` 强制跳转）、`#/onboarding` 直达；移除 dsh onboarding JS 注入 hack；渲染层 ErrorBoundary + 主进程加载失败/崩溃兜底；
+2. **上传下载智能同步（Git 时间戳比对）**：`smartSync` 引擎——本地 mtime vs 远端提交时间（批量 `git log --format=%ct --name-only`），容差窗口内容比对判冲突；预览面板（上传/下载/跳过/冲突 + 勾选 + 统计）、冲突三选一（保留本地/使用远程）、模式（智能/仅新增/强制）、时间容差、.gitignore 排除规则、自动同步调度（`sync-completed` 事件）；
+3. **环境一键安装 + 打包内置便携环境**：环境卡片缺失项新增 [一键安装]；`scripts/prepare-portable-env.mjs` 下载 Node/MinGit/pnpm/dsh 归档 + `env-manifest.json`（版本锁定 + sha256）；electron-builder `extraResources` 内置（asar 外），installer 内置优先（免下载 + 校验），未内置回退官方源 + npmmirror 镜像；
+4. **版本更新提示与下载加速**：右下角非阻断通知（[立即更新][稍后提醒][查看日志]）+ 更新进度窗口 + 手动检查按钮；`FastDownloader`——4 线程 Range 分片、断点续传（.parts）、镜像测速选源、SHA256 校验（发布侧随包上传 SHA256SUMS）、校验失败自动换源；自动模式改为「自动检查 + 通知」，同版本/稍后提醒不重复打扰；
+5. **工作文件夹设置与数据迁移**：设置 → 通用新增工作文件夹卡片（当前路径 + 更改位置并迁移 + 打开目录）；`workspaceRelocate` 原子迁移——流式复制（排除 runtime/tmp/sync）→ 完整性校验 → 配置切换 + 默认指针 → 旧目录 `.old` 全量备份 → 失败回滚；
+6. **会话背景自定义**：设置 → 外观新增会话背景（跟随主题/纯色选择器/8 组渐变预设/上传图片，Canvas 压缩 ≤2K + SVG 原样）；填充（cover/contain/fill）、透明度、模糊调整；仅作用于核心工作台对话区域（不影响侧边栏/标题栏）；图片存 `workspace/data/session-bg/`。
+
+### 修复
+
+- `runCommand` Windows 下无法解析 `.cmd` 垫片（npm/pnpm 被误判未安装）→ 新增 `resolveWindowsCommand` 按 PATH 解析真实路径；
+- 首次同步（全新本地仓库）`pull --rebase` 整树根提交 replay 导致 add/add 冲突卡死 → `reset --soft origin/<branch>` 以远端为基 + 残留 rebase 清理；
+- FastDownloader 分片合并偏移错位（`writeSync(position)` 不推进文件位置）→ 手动累计偏移；
+- 工作目录迁移在部分环境目录 rename EPERM → 改为「复制 + 删除」原子切换。
+
+### 质量
+
+- 单元测试 **240 项**全部通过（新增 onboarding / smartSync / fastDownloader / workspaceRelocate / installer 内置环境 35 项）；typecheck + electron-vite 构建全绿；CDP 运行时自测（引导/智能同步全链路/内置环境安装/会话背景/更新 UI）；
+- 新增 6 个可复用 Skill 封装（SKILL.md），随专项文档发布至 `gyg9006/DSH_HH`。
+
+## [2.0.0] - 2026-08-17
+
+### 重构
+
+- **渲染层整体迁移 Vue → React 19**：TypeScript + Tailwind CSS + shadcn 风格组件（Radix primitives：button / card / input / dialog / tabs / switch / badge / pagination 等），全类型 IPC 桥保持不变。
+- **赛博朋克 / 科技感深色 UI**：自定义无边框标题栏（frame:false + 窗口控制 IPC）、6 入口侧边栏（霓虹流光选中态）、底部状态栏（端口 / 本地地址 / 状态灯 + 服务启停）、Canvas 粒子欢迎页、玻璃拟态面板、数据流动画与扫描线。
+
+### 新增（6 大功能模块）
+
+1. **核心工作台**：webview 嵌入完整 DSH Web 界面；会话导入（文件夹 / 文件）；「提炼为知识」对话框（启发式提取 → 知识库，无分类引导新建）。
+2. **会话管理**：便签式分组卡片网格（[+新增分组] 虚线卡 + 分组重命名/删除/置顶）；分组详情会话列表（重命名 / 收藏 / 移动到组 / 返回工作区 / 导出 / 删除）。
+3. **Agent 管理**：GitHub URL 导入（自动拉取仓库信息）；卡片状态徽章；运行（日志弹窗）；多选「协同工作」（并行日志流骨架）。
+4. **知识库**：分类网格（条目计数 + 数据流动画）；知识条目 CRUD（自动时间戳 + 关键词标签）；关键词 / 分类检索；合并去重迭代；SkillAdapter 接口（启发式 Mock，生产可接 LLM）。
+5. **Skill 管理**：Tabs [插件市场] [技能市场] [已安装]；联网搜索（按名字/功能词）；🔥 前 10 推荐标记；每页 10 项分页器；已安装插件 / 技能双列管理。
+6. **设置**：左侧子菜单 + 右侧表单——通用（语言 / Agent 预设）、外观（主题深/浅/跟随系统）、快捷键、关于（版本 + 更新）、高级配置（环境检测 / 模型与 API / 服务与运行 / 自动备份 / 异地同步）。
+
+### 修复
+
+- Electron 不支持 `window.prompt()`：知识库分类创建/重命名、Agent 重命名改为 Dialog 输入框。
+- 打包平铺脚本支持全新 app 目录（仅含 win-unpacked / builder 辅助文件）。
+
+### 质量
+
+- 主进程新增 `knowledge.ts` / `agents.ts` 模块与 13 个新 IPC 通道（含 12 项新单元测试）。
+- 单元测试 **189 项**全部通过；typecheck（node + web）全绿；electron-vite 构建 + electron-builder 打包验证通过；打包产物 CDP 实测（布局 / 服务 / webview / 各模块）。
+
+## [0.3.0] - 2026-08-16
+
+### 新增
+
+- **插件设置重构**（设置 → 插件）：
+  - 「功能插件」页内置推荐插件列表之上新增**联网搜索**（按名字 / 功能词，如「搜索」「数据库」「mcp」），npmmirror 精确 / 全文检索，结果可直接安装（pnpm add 到 profile）。
+  - 移除与搜索功能重复的「在线插件市场」tab（两处能力合并进「功能插件」页）。
+  - 「推荐技能」页新增**联网搜索**（按名字 / 功能词，如「pdf」「代码审查」），可安装任意 npm 技能包（包内所有含 SKILL.md 的技能装进 workspace/skills）；新 IPC `skills:search` / `skills:install-npm`。
+  - 「已安装」页同时展示**已安装插件列表**与**已安装技能列表**（workspace/skills），一目了然。
+- **设置拆分**：原「日志与关于」拆为两个独立 tab——
+  - 「日志与初始化」：应用日志 / dsh 运行日志（过滤 / 刷新 / 导出 zip / 清空）+ 出厂重置（保留运行环境或完全重置），去掉关于内容与顶部版本显示。
+  - 「关于」：醒目版本卡片（客户端版本 + dsh / Node / Git / Electron / Chromium 版本号）+ 更新方式（自动 / 手动、检查更新、下载、重启应用），去掉日志与重置。
+  - 侧边栏设置项与导航同步更新为「日志与初始化」「关于」两项。
+
+### 修复
+
+- 技能联网搜索 `searchNpmSkills` 参数传递错误（把工作目录误作搜索词），已修正为按用户输入搜索。
+
+### 测试
+
+- 单测保持 **181** 项全部通过；typecheck（tsc + vue-tsc）全绿；内置应用 CDP 实测：插件三子页、联网搜索（含中文功能词「代码审查」28 条结果）、已安装双列表、日志与初始化 / 关于两页均符合预期。
+
+## [0.2.0] - 2026-08-16
+
+### 新增
+
+- **版本更新功能**（设置 → 日志与关于）：支持自动 / 手动两种更新模式。
+  - 自动更新：应用启动 10 秒后与每 6 小时自动检测新版本（GitHub Releases），发现新版本自动下载，完成后提示重启应用完成更新。
+  - 手动更新：点击「检查更新」按钮检测，可查看更新内容，手动下载并应用。
+  - 更新包走 GitHub Releases 资产，网络层绕过被 DNS 污染的 github.com 主站（经 api.github.com → objects CDN）。
+- **skill 支持新增**：`simplify`（code-simplifier）技能随技能市场可用（与 code-review 一并用于本次全量代码审查）。
+- 安装 `code-review` 与 `simplify` 两个技能用于项目自审（真实 dsh 会话扫描全部源码，产出 P0/P1/P2 分级报告）。
+
+### 修复
+
+- **关闭窗口行为修复**：此前「关闭即隐藏到托盘」的拦截注册在窗口创建之前，从未生效——点击 X 会直接销毁窗口且托盘无法恢复。现改为窗口创建后注册拦截；托盘在窗口被销毁时也能自动重建主窗口。
+- **服务启动超时单位不一致**：设置页「启动超时时间」以秒存储（默认 60），主进程却按毫秒使用，保存一次服务配置后启动即超时。现统一按秒换算为毫秒。
+- **删除工作区（服务不可达回退）算错会话目录名**：改用 `dshProjectKey` 规则定位并删除会话目录，同时清理该工作区会话的归档 / 分组映射 / 收藏索引，避免孤儿数据与残留引用。
+- **归档会话查找只认 zstd**：`compression: none` 的未压缩归档会话无法还原 / 删除，现兼容明文与压缩两种格式。
+- **技能 tar 解包路径穿越**：npm 技能包条目路径经规范化校验，拒绝 `../` 与绝对路径，恶意包无法写出技能根目录。
+- **YAML 全文往返破坏 dsh 配置**：`settings.yaml` / `.credentials.yaml` / `cordis.patch.yml` 的读写统一走 `shared/yaml.ts`（JSON_SCHEMA），不再把日期转成时间戳、不再规范化数字进制、不破坏注释之外的数据。
+- **插件安装 scoped 包名解析错误**：`@deepseek-ai/xxx` 等 scoped 包安装后 bundle 状态误报，现正确解析包名；安装 / 卸载参数增加 npm 包名规范校验（拒绝 `-` 开头等注入面）。
+- **异地同步：已删除会话会在下次拉取时复活**：同步在复制之外增加按会话 id 的对齐删除，删除操作可经 git 传播。
+- **同步强制「以远端为准」不先 fetch**：`reset --hard` 前先 fetch 远端，避免回退到过期引用。
+- **同步远端地址未校验**：仅接受 http(s) / ssh / git 协议，拒绝前导 `-`；配置保存失败时给出明确提示。
+- **应用版本号恒显示 0.1.0**：`AppGetInfo` 改用 `app.getVersion()`（打包后 npm_package_version 环境变量不再注入）。
+- **渲染层多处确认框取消误报「界面异常」**：ApiTab / PluginTab 的 `ElMessageBox.confirm` 取消改为静默返回。
+- **Sidebar 视图对勾图标未导入**：`CircleCheckFilled` 补导入（此前运行时渲染失败、typecheck 不拦截）。
+- **Sidebar 三处下拉菜单混入字面 `\n` 文本**：已删除，菜单项间不再显示伪影。
+- **切换 dsh 内置侧边栏 CSS 累积**：insertCSS 按 key 先移除旧规则再注入，避免多次切换累积样式表。
+- **渲染层 store 无 catch**：service.refresh / migrate.scan 失败不再产生 unhandled rejection。
+- **GeneralTab / ApiTab 加载失败会覆盖真实配置**：加载失败时禁用保存按钮并提示，避免用默认值清空 apiKey。
+- **BackupTab / SyncTab 保存失败静默**：补失败提示；SyncTab 冲突判断改为结构化 `conflict` 字段（不再字符串匹配）。
+- **Wizard 下一步无防抖**：双击「下一步」会跳过环境检测直达完成页，现加 in-flight 守卫。
+- **ServiceTab 开机自启设置失败不回滚**：开关状态与系统登录项保持一致。
+
+### 优化（冗余 / 简化）
+
+- 删除死代码：`stores/sessions.ts`（整文件零引用）、`SettingsTabShell.vue`（占位组件）、`shared/ipc.ts` 的 `AppVersionInfo` 接口。
+- `ipc.ts` 三个同构广播函数合并为通用 `broadcast(channel, payload)`。
+- `plugins.ts` 的 `dshEnv` 不再重复展开 `buildChildEnv`（`buildDshEnv` 内部已包含）。
+- `dshUi.ts` 的 `writeShowDshSidebar` 改用原子写（tmp + rename）。
+- 新增 `src/shared/yaml.ts` 公共模块（`loadYamlObject` / `loadYamlAny` / `dumpYaml`），apiConfig / dshUi / migrate 三处复用。
+- 新增 `src/main/updater.ts` 更新模块（设置 / 检查 / 下载 / 应用 / 自动调度），含 16 个单元测试。
+- `sync.ts` 新增 `isValidRemoteUrl` / `pruneMissing`（含测试）。
+
+### 测试
+
+- 单测从 160 增至 **181**（updater 16 + sync 5），全部通过；typecheck（tsc + vue-tsc）全绿。
+
+## [0.1.0] - 2026-08-15
+
+### 新增
+
+- DSH 桌面首个可用版本：12 节规格（M1~M7）全部落地。
+- 便携绿色版：全部运行环境与数据收敛在单一工作文件夹，零注册表 / %APPDATA% 残留，整文件夹可迁移。
+- 一键安装 Node / npm / pnpm / Git / dsh；真实 dsh 会话（web 界面 + 对话 + 侧边栏 + 分组 / 归档 / 收藏）。
+- 会话导入（目录 / 文件 / zip）、备份与恢复、异地同步（Git）、模型与 API 配置、功能插件与技能市场。
+- 系统托盘、开机自启、窗口状态记忆、日志查看与导出、出厂重置。

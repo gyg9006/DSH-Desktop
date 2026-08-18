@@ -1,0 +1,36 @@
+appId: com.dshdesktop.app
+productName: DSH 桌面
+electronDist: node_modules/electron/dist
+directories:
+  buildResources: build
+  # 交付目录：源码与绿色文件夹分离（源码=dsh-workbench-src，交付=../DSH-Desktop）
+  output: ../DSH-Desktop/app
+files:
+  - out/**/*
+  - resources/**/*
+  - '!resources/portable-env/**'
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,tailwind.config.js,postcss.config.js,vitest.config.ts}'
+  - '!{.gitignore,.npmrc,README.md}'
+asar: true
+# 打包内置便携环境（P3）：解包到 <app>/resources/portable-env（asar 之外，可 fs 读取）
+extraResources:
+  - from: resources/portable-env
+    to: portable-env
+    filter:
+      - '**/*'
+win:
+  executableName: DSH 桌面
+  target:
+    - target: dir
+      arch:
+        - x64
+  icon: build/icon.ico
+  # 跳过 exe 图标/版本信息编辑与签名（避免构建期额外下载 winCodeSign/rcedit；
+  # 图标与版本元数据在打包阶段再补全）
+  signAndEditExecutable: false
+npmRebuild: false
+electronDownload:
+  cache: _electron-cache

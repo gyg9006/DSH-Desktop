@@ -9,7 +9,16 @@
 ### 修复
 
 - **设置里输入 API Key 后无法同步到 dsh**（模型选择器消失 / dsh 反复提示输入 API Key）：根因是保存 Key 只写加密存储（secure-keys.json），不创建 models.json → `llm-deepseek`/`llm-pi-ai` 段不写 → dsh 模型选择器无数据、凭据不同步。**保存 Key 时自动启用该厂商并补齐默认模型**，一次保存即同步 models.json → settings.yaml → credentials.yaml，dsh 对话页模型选择器立即可选、不再提示配置 Key；
-- 配套端到端验证：输入 Key → models.json（enabled+models）/ settings.yaml（llm-deepseek）/ credentials.yaml（DEEPSEEK_API_KEY）三处同步落盘，服务启动后 dsh web 就绪。
+- **dsh 服务启动失败（历史 symlink 安装）**：v2.1.3 的 `npm install <dir> --prefix` 是 file:link 语义 → `runtime/dsh` 是指向内置的 junction 且不装依赖 → 启动即 `ERR_MODULE_NOT_FOUND`。新增 `dshInstallBroken` 检测 + `safeRemoveDir`（junction 用 rmdir 删链接本身，防止误删内置环境），启动服务自动清理重装；
+- **服务端口配置 hover Tooltip**：自动探测/固定端口补悬停提示（300ms 显示/200ms 消失）。
+
+### 版本更新保护机制（防再犯）
+
+- `resources/feature-registry.json`：功能注册表（10 个功能模块 + required 标记 + 关键产物清单）；
+- `smokeTestApp`：更新包安装前冒烟（exe 名 / 内置环境 / asar），任一失败中止更新，旧版本不受影响；
+- `update.bat` 增强：替换后二次校验，失败回滚到 app.old；
+- 更新报告 `logs/update-report.md`（版本/冒烟/回滚留档）；
+- `verify-build.mjs` 集成 feature-registry 校验。
 
 ## [2.1.4] - 2026-08-18
 

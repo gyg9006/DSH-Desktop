@@ -1,0 +1,21 @@
+{
+  "registryVersion": "1.0",
+  "appName": "DSH-Desktop",
+  "features": {
+    "navigation-home": { "version": "1.0", "required": true, "check": "app" },
+    "dsh-service": { "version": "1.0", "required": true, "check": "app" },
+    "model-selector": { "version": "1.0", "required": true, "check": "env-settings" },
+    "api-key-manager": { "version": "1.0", "required": true, "check": "app" },
+    "port-config": { "version": "1.0", "required": true, "check": "app" },
+    "smart-sync": { "version": "1.0", "required": false, "check": "app" },
+    "theme-engine": { "version": "1.0", "required": false, "check": "app" },
+    "session-background": { "version": "1.0", "required": false, "check": "app" },
+    "workspace-manager": { "version": "1.0", "required": true, "check": "app" },
+    "env-detector": { "version": "1.0", "required": true, "check": "app" }
+  },
+  "requiredArtifacts": {
+    "exe": "DSH-Desktop.exe",
+    "portableEnv": ["node/node.exe", "git/cmd/git.exe", "pnpm/pnpm.exe", "dsh-cli/package.json", "env-manifest.json"],
+    "asar": "app.asar"
+  }
+}

@@ -9,7 +9,8 @@ import {
   readUpdateSettings,
   writeUpdateSettings,
   checkForUpdate,
-  formatBytes
+  formatBytes,
+  smokeTestApp
 } from '../updater'
 
 const tempDirs: string[] = []
@@ -195,5 +196,28 @@ describe('formatBytes', () => {
     expect(formatBytes(512)).toBe('512 B')
     expect(formatBytes(2048)).toBe('2 KB')
     expect(formatBytes(5 * 1024 * 1024)).toBe('5 MB')
+  })
+})
+
+describe('smokeTestApp（更新后冒烟，版本保护）', () => {
+  it('完整 app 目录 → 通过', () => {
+    const dir = makeTempDir()
+    fs.writeFileSync(path.join(dir, 'DSH-Desktop.exe'), 'x')
+    const env = path.join(dir, 'resources', 'portable-env')
+    for (const rel of ['node/node.exe', 'git/cmd/git.exe', 'pnpm/pnpm.exe', 'dsh-cli/package.json', 'env-manifest.json']) {
+      fs.mkdirSync(path.join(env, path.dirname(rel)), { recursive: true })
+      fs.writeFileSync(path.join(env, rel), 'x')
+    }
+    fs.mkdirSync(path.join(dir, 'resources'), { recursive: true })
+    fs.writeFileSync(path.join(dir, 'resources', 'app.asar'), 'x')
+    expect(smokeTestApp(dir).ok).toBe(true)
+  })
+
+  it('缺 exe / 内置环境 → 失败且给出原因', () => {
+    const dir = makeTempDir()
+    const r = smokeTestApp(dir)
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('DSH-Desktop.exe')
+    expect(r.error).toContain('portable-env')
   })
 })

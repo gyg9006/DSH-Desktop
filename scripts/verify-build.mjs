@@ -112,6 +112,21 @@ if (!fs.existsSync(envDir)) {
   else fail('env-manifest.json 有效且 platform 匹配', manifestPath)
 }
 
+// ---- 4. 功能注册表（版本保护） ----
+const registryPath = path.join(appDir, 'resources', 'feature-registry.json')
+try {
+  const reg = JSON.parse(fs.readFileSync(registryPath, 'utf8'))
+  if (reg && typeof reg === 'object' && reg.features && typeof reg.features === 'object') {
+    const required = Object.entries(reg.features).filter(([, f]) => f && typeof f === 'object' && f.required === true).map(([k]) => k)
+    if (required.length > 0) pass(`feature-registry.json 有效（required 功能 ${required.length} 项）`, required.join(', '))
+    else fail('feature-registry.json required 功能为空', registryPath)
+  } else {
+    fail('feature-registry.json 结构无效', registryPath)
+  }
+} catch {
+  fail('feature-registry.json 缺失或损坏', registryPath)
+}
+
 // ---- 3. 汇总 ----
 const failed = results.filter((l) => l.includes('FAIL'))
 const logPath = path.join(projectRoot, '..', 'DSH-Desktop', 'verify-build.log')

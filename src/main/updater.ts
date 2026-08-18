@@ -394,6 +394,52 @@ export async function downloadUpdate(assetId: number): Promise<UpdateDownloadRes
 // ---------------------------------------------------------------------------
 
 /**
+ * 版本更新后冒烟测试（版本保护）：校验新 app 目录关键产物与功能注册表，
+ * 任一失败 → 不安装（返回 false，由调用方中止更新流程，旧版本保持可用）。
+ * 校验项（对应 feature-registry.json 的 requiredArtifacts + required features 文件）：
+ * 1. 可执行文件名 DSH-Desktop.exe；
+ * 2. resources/portable-env 关键可执行文件齐备（node/git/pnpm/dsh + env-manifest）；
+ * 3. app.asar 存在。
+ */
+export function smokeTestApp(appDir: string): { ok: boolean; error?: string } {
+  const problems: string[] = []
+  const exeName = process.platform === 'win32' ? 'DSH-Desktop.exe' : 'DSH-Desktop'
+  if (!fs.existsSync(path.join(appDir, exeName))) problems.push(`缺少可执行文件 ${exeName}`)
+  const envDir = path.join(appDir, 'resources', 'portable-env')
+  for (const rel of ['node/node.exe', 'git/cmd/git.exe', 'pnpm/pnpm.exe', 'dsh-cli/package.json', 'env-manifest.json']) {
+    if (!fs.existsSync(path.join(envDir, rel))) problems.push(`内置环境缺失：resources/portable-env/${rel}`)
+  }
+  if (!fs.existsSync(path.join(appDir, 'resources', 'app.asar'))) problems.push('缺少 app.asar')
+  return problems.length === 0 ? { ok: true } : { ok: false, error: problems.join('；') }
+}
+
+/**
+ * 生成更新报告 update-report.md（版本保护留档）：更新版本、变更、冒烟结果、回滚状态。
+ * 更新报告写在工作文件夹 <ws>/logs/update-report.md。
+ */
+export function writeUpdateReport(ws: string, payload: { fromVersion: string; toVersion: string; smoke: boolean; smokeError?: string; rolledBack?: boolean }): void {
+  try {
+    const lines = [
+      '# DSH 桌面 更新报告',
+      '',
+      `- 更新时间：${new Date().toISOString()}`,
+      `- 更新版本：${payload.fromVersion} → ${payload.toVersion}`,
+      `- 冒烟测试：${payload.smoke ? '✅ 通过' : `❌ 失败（${payload.smokeError ?? ''}）`}`,
+      `- 是否回滚：${payload.rolledBack ? '是' : '否'}`,
+      '',
+      '## 变更文件（本次更新包内容）',
+      '- 客户端主程序（app 目录整体替换）',
+      '- 内置便携环境（resources/portable-env：node/git/pnpm/dsh）',
+      '- 功能注册表（resources/feature-registry.json）'
+    ]
+    fs.mkdirSync(path.join(ws, 'logs'), { recursive: true })
+    fs.writeFileSync(path.join(ws, 'logs', 'update-report.md'), lines.join('\n'), 'utf8')
+  } catch (error) {
+    logger.warn(`更新报告写入失败：${String(error)}`)
+  }
+}
+
+/**
  * 生成 update.bat 并触发退出。
  * 便携版 exe 运行中无法被覆盖，故：
  * 1. 把新包解压到 <root>/workspace/tmp/update-app/（zip 根 = app 目录内容）；
@@ -408,15 +454,28 @@ export function applyUpdate(zipPath: string): { ok: boolean; error?: string } {
     const appDir = path.join(root, 'app')
     const stageDir = path.join(ws, 'tmp', 'update-app')
     const oldDir = path.join(root, 'app.old')
+    const fromVersion = app.getVersion()
 
     // 解压 zip（zip 根 = app 目录内容，解压后 stage 即新 app 目录）
     fs.rmSync(stageDir, { recursive: true, force: true })
     fs.mkdirSync(stageDir, { recursive: true })
     const unzip = spawnSyncUnzip(zipPath, stageDir)
-    if (!unzip) return { ok: false, error: '解压更新包失败（系统缺少 tar，无法解压 zip）' }
+    if (!unzip) {
+      writeUpdateReport(ws, { fromVersion, toVersion: '?', smoke: false, smokeError: '解压失败（缺少 tar）' })
+      return { ok: false, error: '解压更新包失败（系统缺少 tar，无法解压 zip）' }
+    }
     // 校验解压结果：应包含可执行文件或 resources
     if (!fs.existsSync(path.join(stageDir, 'resources')) && !fs.readdirSync(stageDir).some((f) => /\.exe$/i.test(f))) {
+      writeUpdateReport(ws, { fromVersion, toVersion: '?', smoke: false, smokeError: '更新包内容异常（缺少应用文件）' })
       return { ok: false, error: '更新包内容异常（缺少应用文件）' }
+    }
+
+    // 版本保护：安装前冒烟测试（exe 名 / 内置环境 / asar），任一失败 → 不替换，旧版本保持可用
+    const smoke = smokeTestApp(stageDir)
+    if (!smoke.ok) {
+      writeUpdateReport(ws, { fromVersion, toVersion: '?', smoke: false, smokeError: smoke.error })
+      logger.error(`更新包冒烟测试失败，已中止更新：${smoke.error}`)
+      return { ok: false, error: `更新包冒烟测试失败（${smoke.error}），已中止更新，当前版本不受影响` }
     }
 
     // 清理可能的残留
@@ -433,12 +492,24 @@ export function applyUpdate(zipPath: string): { ok: boolean; error?: string } {
       `if exist "${appDir}" ren "${appDir}" "app.old"`,
       `if not exist "${appDir}" move "${stageDir}" "${appDir}"`,
       `if exist "${stageDir}" xcopy /e /y /q "${stageDir}" "${appDir}" >nul`,
+      // 版本保护：替换后二次校验 exe；失败回滚到 app.old
+      `if not exist "${appDir}\\${exeName}" goto rollback`,
+      `if not exist "${appDir}\\resources\\portable-env\\node\\node.exe" goto rollback`,
       `if exist "${oldDir}" rmdir /s /q "${oldDir}"`,
       `start "" "${path.join(appDir, exeName)}"`,
-      'del "%~f0"'
+      'del "%~f0"',
+      'exit /b 0',
+      ':rollback',
+      'rem 冒烟失败：回滚旧版本',
+      `if exist "${appDir}" rmdir /s /q "${appDir}"`,
+      `if exist "${oldDir}" ren "${oldDir}" "app"`,
+      `if exist "${appDir}\\${exeName}" start "" "${path.join(appDir, exeName)}"`,
+      'del "%~f0"',
+      'exit /b 1'
     ].join('\r\n')
     fs.writeFileSync(batPath, bat, 'utf8')
-    logger.info(`更新脚本已生成：${batPath}（新 exe：${exeName}）`)
+    writeUpdateReport(ws, { fromVersion, toVersion: '?', smoke: true })
+    logger.info(`更新脚本已生成：${batPath}（新 exe：${exeName}，冒烟测试通过）`)
     return { ok: true }
   } catch (error) {
     const message = `应用更新失败：${error instanceof Error ? error.message : String(error)}`

@@ -4,6 +4,22 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.8] - 2026-08-19
+
+### 修复
+
+- **客户端启动/点启动服务时偶发直接退出**：根因是**单实例锁残留**（异常退出/强杀后 Electron `SingletonLock` 未清理 → 下次启动拿锁失败即 quit）。新增 `acquireSingleInstanceLock`：锁失败时先检查是否真有其他实例，无则清理锁残留后重试一次；
+- **端口冲突不顺延 / 服务与运行功能不生效**（v2.1.7 发布版）：端口模式保存的闭包 bug（点「自动探测」实际保存了 fixed）已在本版随 v2.1.7 修复，本版一并发布；`probeFreePort` 顺延逻辑确认正常（fixed 端口被占自动顺延到下一空闲端口）；
+- 新增「使用系统 dsh（正常版）」开关（设置 → 服务与运行）：跳过内置便携 dsh，改用系统 dsh（npm 全局/npx 缓存）配合系统 Node 启动；
+- 退出路径日志（window-all-closed / before-quit / 窗口 close）便于后续排查。
+
+### 实测
+
+- 单实例锁：强杀后再次启动可正常进入（锁残留自动清理）；
+- 端口：3080 被占 → 配置 fixed 3081 服务正常起于 3081；固定端口被占自动顺延；
+- 内置 dsh 自动修复：历史 junction 坏安装 → 自动清理重装 551 依赖 → `dsh web 就绪`；
+- 系统 dsh：`node <npx缓存>\@deepseek-ai\dsh\lib\bin.js web --port 3081` → 服务就绪。
+
 ## [2.1.7] - 2026-08-19
 
 ### 修复

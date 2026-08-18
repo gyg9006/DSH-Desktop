@@ -381,9 +381,25 @@ async function installNode(
  * 安全递归删除目录：Windows junction/symlink 必须先用 rmdir 删链接本身，
  * 否则 fs.rmSync(recursive) 会跟随链接删除目标内容（如历史 file:link 安装的
  * runtime/dsh 指向内置 dsh-cli，误删会破坏内置便携环境）。
+ * 删除失败（EPERM：残留 npm 进程持有句柄）自动重试 3 次，间隔 600ms。
  */
 export function safeRemoveDir(dir: string): void {
   if (!fs.existsSync(dir)) return
+  const sleepSync = (ms: number): void => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+  }
+  const rmdir = (p: string): boolean => {
+    for (let i = 0; i < 3; i++) {
+      try {
+        fs.rmdirSync(p)
+        return true
+      } catch {
+        if (i === 2) return false
+        sleepSync(600)
+      }
+    }
+    return false
+  }
   const removeContents = (d: string): void => {
     let entries: fs.Dirent[]
     try {
@@ -395,17 +411,21 @@ export function safeRemoveDir(dir: string): void {
       const p = path.join(d, e.name)
       if (e.isSymbolicLink()) {
         // junction/symlink：rmdir 只删链接，不碰目标
-        try {
-          fs.rmdirSync(p)
-        } catch {
-          fs.rmSync(p, { recursive: true, force: true })
+        if (!rmdir(p)) {
+          try {
+            fs.rmSync(p, { recursive: true, force: true })
+          } catch {
+            /* 忽略 */
+          }
         }
       } else if (e.isDirectory()) {
         removeContents(p)
-        try {
-          fs.rmdirSync(p)
-        } catch {
-          fs.rmSync(p, { recursive: true, force: true })
+        if (!rmdir(p)) {
+          try {
+            fs.rmSync(p, { recursive: true, force: true })
+          } catch {
+            /* 忽略 */
+          }
         }
       } else {
         try {
@@ -417,10 +437,12 @@ export function safeRemoveDir(dir: string): void {
     }
   }
   removeContents(dir)
-  try {
-    fs.rmdirSync(dir)
-  } catch {
-    fs.rmSync(dir, { recursive: true, force: true })
+  if (!rmdir(dir)) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true })
+    } catch {
+      /* 忽略 */
+    }
   }
 }
 

@@ -117,6 +117,41 @@ function resolveDependency(fromDir: string, dep: string): boolean {
   }
 }
 
+/** 清理本工作区 runtime 下残留的 node/npm 进程（中断的 npm install 等），避免目录删除 EPERM。 */
+async function cleanupRuntimeNode(workspaceDir: string): Promise<number> {
+  const runtimePath = path.join(workspaceDir, 'runtime')
+  if (!fs.existsSync(path.join(runtimePath, 'dsh'))) return 0
+  // PowerShell -like 模式：只转义单引号；反斜杠是字面（PowerShell 不做 \ 转义）
+  const match = runtimePath.replace(/'/g, "''")
+  const script = [
+    "Get-CimInstance Win32_Process -Filter \"name = 'node.exe'\"",
+    `| Where-Object { $_.CommandLine -and $_.CommandLine -like '*${match}*' -and $_.CommandLine -notlike '*npm-cache*' }`,
+    '| ForEach-Object { $_.ProcessId }'
+  ].join(' ')
+  const result = await runCommand({
+    command: 'powershell.exe',
+    args: ['-NoProfile', '-NonInteractive', '-EncodedCommand', psEncoded(script)],
+    timeoutMs: 15000
+  })
+  if (result.error) return 0
+  const pids = result.stdout
+    .split(/\s+/)
+    .map((s) => Number.parseInt(s, 10))
+    .filter((n) => Number.isInteger(n) && n > 0 && n !== process.pid)
+  let killed = 0
+  for (const pid of pids) {
+    if (child && pid === child.pid) continue
+    try {
+      killProcessTree(pid)
+      killed += 1
+    } catch {
+      /* 进程可能已退出 */
+    }
+  }
+  if (killed > 0) pushLog(`已清理 ${killed} 个残留运行时进程（中断的安装任务）`)
+  return killed
+}
+
 /**
  * 检测工作区 dsh 安装是否损坏（历史 symlink 安装无依赖 / 依赖缺失）。
  * 损坏时启动服务会自动清理重装（复制 + 包内 npm install）。
@@ -195,7 +230,7 @@ export async function cleanupStaleDsh(): Promise<number> {
   const dshDir = path.join(workspaceDir, 'runtime', 'dsh')
   if (!fs.existsSync(path.join(dshDir, 'node_modules', '@deepseek-ai', 'dsh'))) return 0
   // 命令行含本工作区 runtime\dsh\...\bin.js（注意：不匹配 npm-cache/_npx 等外部路径）
-  const match = dshDir.replace(/\\/g, '\\\\').replace(/'/g, "''")
+  const match = dshDir.replace(/'/g, "''")
   const script = [
     "Get-CimInstance Win32_Process -Filter \"name = 'node.exe'\"",
     `| Where-Object { $_.CommandLine -and $_.CommandLine -like '*${match}*bin.js*' }`,
@@ -248,6 +283,9 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
     // 历史坏安装：v2.1.3 的 npm install <dir> --prefix 是 file:link 语义（symlink 指向内置且不装依赖）
     // → 启动即 ERR_MODULE_NOT_FOUND。自动清掉并重新启用（复制 + 包内 npm install 装依赖）
     pushLog('检测到 dsh 安装不完整（历史 symlink 安装），正在重新启用内置 dsh…')
+    // 先清理残留的 npm/node 进程（中断的安装任务会持有目录句柄导致删除 EPERM）
+    await cleanupRuntimeNode(workspaceDir)
+    await sleep(1000)
     safeRemoveDir(path.join(workspaceDir, 'runtime', 'dsh'))
     dshBin = null
   }

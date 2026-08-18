@@ -4,6 +4,19 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.7] - 2026-08-19
+
+### 修复
+
+- **服务与运行：自动探测 / 固定端口保存后不生效**：根因是点击时 `setPortMode`（异步）+ `savePort()` 闭包读到**点击前的旧值**（点「自动探测」实际保存了 fixed，反之亦然）。改为保存时显式传模式与端口，立即生效；
+- **新增「使用系统 dsh（正常版）」开关**（设置 → 服务与运行）：开启后跳过内置便携 dsh，改用系统 dsh（npm 全局安装或 npx 缓存 `@deepseek-ai/dsh`）配合系统 Node 启动服务；`resolveSystemDshBin` 自动解析 npm 全局根与 npx 缓存（cmd 包装解决 Windows 下 `.cmd` 无法直接 spawn 的问题）。
+
+### 实测
+
+- 端口模式保存：固定端口 39999 → 保存生效；自动探测 → 保存生效；
+- 系统 dsh 启动：`node <npx缓存>\@deepseek-ai\dsh\lib\bin.js web --port 3081` → `dsh web 就绪`，服务运行正常；
+- 内置便携 dsh 启动路径保持默认（不开启开关时）。
+
 ## [2.1.6] - 2026-08-19
 
 ### 修复

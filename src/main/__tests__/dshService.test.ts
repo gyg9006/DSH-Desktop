@@ -4,7 +4,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
-import { probeFreePort, isPortHealthy, dshInstallBroken } from '../dshService'
+import { probeFreePort, isPortHealthy, dshInstallBroken, resolveSystemDshBin } from '../dshService'
 
 const servers: Array<http.Server | net.Server> = []
 
@@ -125,5 +125,19 @@ describe('dshInstallBroken（历史 symlink/依赖缺失检测）', () => {
     } finally {
       fs.rmSync(ws, { recursive: true, force: true })
     }
+  })
+})
+
+describe('resolveSystemDshBin（系统 dsh 解析）', () => {
+  it('返回系统 dsh bin 路径或 null（不抛异常）', () => {
+    const bin = resolveSystemDshBin()
+    // 有系统 dsh（全局/npx 缓存）→ 返回 bin.js 路径；没有 → null。两者均合法，关键是稳定不抛
+    expect(typeof bin).toBe('string')
+  })
+
+  it('连续调用结果稳定（幂等）', () => {
+    const a = resolveSystemDshBin()
+    const b = resolveSystemDshBin()
+    expect(a).toBe(b)
   })
 })

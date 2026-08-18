@@ -207,21 +207,24 @@ function ServiceCard(): JSX.Element {
   const [portMode, setPortMode] = useState<'auto' | 'fixed'>('auto')
   const [port, setPort] = useState('3080')
   const [autoStart, setAutoStart] = useState(false)
+  const [useSystemDsh, setUseSystemDsh] = useState(false)
 
   useEffect(() => {
     void window.dshw.getConfig().then((cfg) => {
-      const svc = (cfg.service ?? {}) as { portMode?: 'auto' | 'fixed'; port?: number; autoStart?: boolean }
+      const svc = (cfg.service ?? {}) as { portMode?: 'auto' | 'fixed'; port?: number; autoStart?: boolean; useSystemDsh?: boolean }
       setPortMode(svc.portMode ?? 'auto')
       setPort(String(svc.port ?? 3080))
       setAutoStart(svc.autoStart === true)
+      setUseSystemDsh(svc.useSystemDsh === true)
     })
   }, [])
 
-  const savePort = async (): Promise<void> => {
+  // 端口模式保存：显式传 mode/port（避免 setState 异步导致闭包读到旧值而保存失效）
+  const savePort = async (mode: 'auto' | 'fixed', p?: string): Promise<void> => {
     await window.dshw.updateConfig({
       service: {
-        portMode,
-        port: portMode === 'fixed' ? Number(port) || 3080 : undefined
+        portMode: mode,
+        port: mode === 'fixed' ? Number(p ?? port) || 3080 : undefined
       }
     })
   }
@@ -242,19 +245,33 @@ function ServiceCard(): JSX.Element {
       <CardContent className="space-y-3">
         <div className="flex items-center gap-2">
           <Tip text="自动探测：自动寻找可用端口，避免冲突">
-            <Badge variant={portMode === 'auto' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => { setPortMode('auto'); void savePort() }}>
+            <Badge
+              variant={portMode === 'auto' ? 'default' : 'outline'}
+              className="cursor-pointer"
+              onClick={() => {
+                setPortMode('auto')
+                void savePort('auto')
+              }}
+            >
               自动探测
             </Badge>
           </Tip>
           <Tip text="固定端口：手动指定端口号，适用于已部署固定端口的场景">
-            <Badge variant={portMode === 'fixed' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => { setPortMode('fixed'); void savePort() }}>
+            <Badge
+              variant={portMode === 'fixed' ? 'default' : 'outline'}
+              className="cursor-pointer"
+              onClick={() => {
+                setPortMode('fixed')
+                void savePort('fixed')
+              }}
+            >
               固定端口
             </Badge>
           </Tip>
           {portMode === 'fixed' && (
             <>
               <Input value={port} onChange={(e) => setPort(e.target.value.replace(/\D/g, ''))} className="h-7 w-24 font-mono text-xs" />
-              <Button size="sm" variant="outline" className="h-7" onClick={() => void savePort()}>保存</Button>
+              <Button size="sm" variant="outline" className="h-7" onClick={() => void savePort('fixed')}>保存</Button>
             </>
           )}
           <div className="flex-1" />
@@ -264,6 +281,18 @@ function ServiceCard(): JSX.Element {
             <Power className="h-3.5 w-3.5 text-cyber-neon" /> 开机自动启动 dsh 服务
           </span>
           <Switch checked={autoStart} onCheckedChange={(v) => void saveAutoStart(v)} />
+        </div>
+        <div className="flex items-center justify-between rounded-lg border border-cyber-border bg-cyber-panel2 px-3 py-2">
+          <span className="flex items-center gap-2 text-xs text-cyber-text">
+            <Terminal className="h-3.5 w-3.5 text-cyber-neon" /> 使用系统 dsh（正常版，跳过内置便携版）
+          </span>
+          <Switch
+            checked={useSystemDsh}
+            onCheckedChange={(v) => {
+              setUseSystemDsh(v)
+              void window.dshw.updateConfig({ service: { useSystemDsh: v } })
+            }}
+          />
         </div>
       </CardContent>
     </Card>

@@ -5,9 +5,10 @@
  * - 应用退出时优雅关闭（正常终止，3 秒后强制 kill 进程树）；
  * - 每 5 秒 HTTP 探活，状态实时推送渲染层（绿=运行/灰=停止/红=异常）。
  */
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import net from 'node:net'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { logger } from './logger'
 import { getWorkspaceDir, readAppConfig, updateAppConfig } from './config'
@@ -36,6 +37,8 @@ interface ServiceConfig {
   extraArgs?: string[]
   /** 使用系统 Node 而非便携版（规格 6.15，默认关） */
   useSystemNode?: boolean
+  /** 使用系统 dsh（npx/npm 全局安装）而非内置便携版；跳过自动启用内置（默认关） */
+  useSystemDsh?: boolean
   /** 开机自动启动 dsh 服务（规格 6.14） */
   autoStart?: boolean
 }
@@ -181,6 +184,74 @@ export function dshInstallBroken(workspaceDir: string): boolean {
   return false
 }
 
+/** 从 dsh 包的 package.json 解析 bin 入口（存在性校验）。 */
+function binFromPkg(pkgPath: string): string | null {
+  try {
+    if (!fs.existsSync(pkgPath)) return null
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { bin?: string | Record<string, string> }
+    const bin = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.dsh
+    if (!bin) return null
+    const candidate = path.join(path.dirname(pkgPath), bin)
+    return fs.existsSync(candidate) ? candidate : null
+  } catch {
+    return null
+  }
+}
+
+/** npm cache 目录：npm config get cache（cmd 包装，Windows .cmd 不能直接 spawn）。 */
+function npmCacheDir(): string {
+  try {
+    const r = spawnSync('cmd', ['/d', '/s', '/c', 'npm config get cache'], { encoding: 'utf8', timeout: 20000, windowsHide: true })
+    const out = String(r.stdout ?? '').trim()
+    if (r.status === 0 && out) return out
+  } catch {
+    /* 忽略 */
+  }
+  const local = process.env.LOCALAPPDATA
+  if (local) {
+    const p = path.join(local, 'npm-cache')
+    if (fs.existsSync(p)) return p
+  }
+  return path.join(os.homedir(), '.npm')
+}
+
+/**
+ * 解析系统 dsh（正常版）入口：
+ * 1. npm 全局根（npm root -g 下的 @deepseek-ai/dsh）；
+ * 2. npx 缓存（<npm cache>/_npx/<hash>/node_modules/@deepseek-ai/dsh，取最新）。
+ */
+export function resolveSystemDshBin(): string | null {
+  try {
+    const r = spawnSync('cmd', ['/d', '/s', '/c', 'npm root -g'], { encoding: 'utf8', timeout: 20000, windowsHide: true })
+    if (r.status === 0) {
+      const root = String(r.stdout).trim()
+      const bin = binFromPkg(path.join(root, '@deepseek-ai', 'dsh', 'package.json'))
+      if (bin) return bin
+    }
+  } catch {
+    /* 忽略 */
+  }
+  try {
+    const npxRoot = path.join(npmCacheDir(), '_npx')
+    if (fs.existsSync(npxRoot)) {
+      let best: { mtime: number; bin: string } | null = null
+      for (const e of fs.readdirSync(npxRoot, { withFileTypes: true })) {
+        if (!e.isDirectory()) continue
+        const pkgPath = path.join(npxRoot, e.name, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
+        const bin = binFromPkg(pkgPath)
+        if (bin) {
+          const mtime = fs.statSync(path.join(npxRoot, e.name)).mtimeMs
+          if (!best || mtime > best.mtime) best = { mtime, bin }
+        }
+      }
+      if (best) return best.bin
+    }
+  } catch {
+    /* 忽略 */
+  }
+  return null
+}
+
 /** 从 start 起探测第一个空闲端口（127.0.0.1）。 */
 export function probeFreePort(start = 3080, tries = 100): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -279,27 +350,40 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
   // dsh 启动入口动态解析（版本升级兼容）：读取 dsh 包 package.json 的 bin 字段，
   // 避免硬编码 lib/bin.js 在 dsh 升级改包结构后失效。
   let dshBin = resolveDshBin(workspaceDir)
-  if (dshBin && dshInstallBroken(workspaceDir)) {
-    // 历史坏安装：v2.1.3 的 npm install <dir> --prefix 是 file:link 语义（symlink 指向内置且不装依赖）
-    // → 启动即 ERR_MODULE_NOT_FOUND。自动清掉并重新启用（复制 + 包内 npm install 装依赖）
-    pushLog('检测到 dsh 安装不完整（历史 symlink 安装），正在重新启用内置 dsh…')
-    // 先清理残留的 npm/node 进程（中断的安装任务会持有目录句柄导致删除 EPERM）
-    await cleanupRuntimeNode(workspaceDir)
-    await sleep(1000)
-    safeRemoveDir(path.join(workspaceDir, 'runtime', 'dsh'))
-    dshBin = null
-  }
-  if (!dshBin && bundledToolPath('dsh')) {
-    // 内置 dsh 可用但未安装到工作区 → 自动启用（内置主包 + 依赖安装，免手动一键安装）
-    pushLog('检测到内置 dsh，正在自动启用（免手动安装）…')
-    const inst = await runInstall(workspaceDir, 'dsh', 'install', {
-      log: (m) => pushLog(m),
-      progress: () => undefined
-    })
-    if (!inst.ok) {
-      return { ok: false, error: `内置 dsh 自动启用失败：${inst.error ?? '未知错误'}（可稍后在「设置 → 环境检测」中手动重试）` }
+  let dshSource: 'system' | 'portable' | 'bundled' | null = null
+  if (svc.useSystemDsh === true) {
+    // 使用系统 dsh（正常版，npx/npm 全局安装）：不自动启用内置便携版
+    dshBin = resolveSystemDshBin()
+    dshSource = dshBin ? 'system' : null
+    if (!dshBin) {
+      return { ok: false, error: '未找到系统 dsh（请先执行 npm install -g @deepseek-ai/dsh，或确认 npx 可找到该包）' }
     }
-    dshBin = resolveDshBin(workspaceDir)
+  } else {
+    if (dshBin && dshInstallBroken(workspaceDir)) {
+      // 历史坏安装：v2.1.3 的 npm install <dir> --prefix 是 file:link 语义（symlink 指向内置且不装依赖）
+      // → 启动即 ERR_MODULE_NOT_FOUND。自动清掉并重新启用（复制 + 包内 npm install 装依赖）
+      pushLog('检测到 dsh 安装不完整（历史 symlink 安装），正在重新启用内置 dsh…')
+      // 先清理残留的 npm/node 进程（中断的安装任务会持有目录句柄导致删除 EPERM）
+      await cleanupRuntimeNode(workspaceDir)
+      await sleep(1000)
+      safeRemoveDir(path.join(workspaceDir, 'runtime', 'dsh'))
+      dshBin = null
+    }
+    if (!dshBin && bundledToolPath('dsh')) {
+      // 内置 dsh 可用但未安装到工作区 → 自动启用（内置主包 + 依赖安装，免手动一键安装）
+      pushLog('检测到内置 dsh，正在自动启用（免手动安装）…')
+      const inst = await runInstall(workspaceDir, 'dsh', 'install', {
+        log: (m) => pushLog(m),
+        progress: () => undefined
+      })
+      if (!inst.ok) {
+        return { ok: false, error: `内置 dsh 自动启用失败：${inst.error ?? '未知错误'}（可稍后在「设置 → 环境检测」中手动重试）` }
+      }
+      dshBin = resolveDshBin(workspaceDir)
+      dshSource = 'portable'
+    } else if (dshBin) {
+      dshSource = 'portable'
+    }
   }
   if (!dshBin) {
     return { ok: false, error: '未安装 DeepSeek Harness（dsh）。请在「设置 → 环境检测」中一键安装' }
@@ -308,7 +392,7 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
   // 否则按 env-resolver 三级：内置便携（resources/portable-env/node）→ 工作区便携 → 系统
   const nodeTool = resolveEnvTool(workspaceDir, 'node')
   let nodeRunner: string
-  if (svc.useSystemNode === true) nodeRunner = 'node'
+  if (svc.useSystemNode === true || dshSource === 'system') nodeRunner = 'node'
   else if (nodeTool.source === 'bundled' || nodeTool.source === 'portable') nodeRunner = nodeTool.binPath!
   else if (nodeTool.source === 'system') nodeRunner = 'node'
   else {

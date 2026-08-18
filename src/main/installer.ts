@@ -377,6 +377,53 @@ async function installNode(
   }
 }
 
+/**
+ * 安全递归删除目录：Windows junction/symlink 必须先用 rmdir 删链接本身，
+ * 否则 fs.rmSync(recursive) 会跟随链接删除目标内容（如历史 file:link 安装的
+ * runtime/dsh 指向内置 dsh-cli，误删会破坏内置便携环境）。
+ */
+export function safeRemoveDir(dir: string): void {
+  if (!fs.existsSync(dir)) return
+  const removeContents = (d: string): void => {
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      const p = path.join(d, e.name)
+      if (e.isSymbolicLink()) {
+        // junction/symlink：rmdir 只删链接，不碰目标
+        try {
+          fs.rmdirSync(p)
+        } catch {
+          fs.rmSync(p, { recursive: true, force: true })
+        }
+      } else if (e.isDirectory()) {
+        removeContents(p)
+        try {
+          fs.rmdirSync(p)
+        } catch {
+          fs.rmSync(p, { recursive: true, force: true })
+        }
+      } else {
+        try {
+          fs.unlinkSync(p)
+        } catch {
+          /* 忽略 */
+        }
+      }
+    }
+  }
+  removeContents(dir)
+  try {
+    fs.rmdirSync(dir)
+  } catch {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 /** 把解压目录中带一层版本前缀的根提升到 staging 根（如 node-v24.19.0-win-x64/ → 根）。 */
 function liftRoot(staging: string, rel: string): void {
   const root = findRootWith(staging, rel)
@@ -762,7 +809,7 @@ async function installDsh(
     }
     const target = path.join(dshDir, 'node_modules', '@deepseek-ai', 'dsh')
     fs.mkdirSync(path.dirname(target), { recursive: true })
-    if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true })
+    if (fs.existsSync(target)) safeRemoveDir(target)
     fs.cpSync(bundledDsh.dirPath, target, { recursive: true })
     const { command, args } = npmCliArgs(nodeDir, ['install', '--no-audit', '--no-fund'])
     const result = await runCommand({

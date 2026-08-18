@@ -16,8 +16,38 @@ import {
   bundledArchive,
   verifySha256,
   sha256Of,
-  findGitRoot
+  findGitRoot,
+  safeRemoveDir
 } from '../installer'
+
+describe('safeRemoveDir（Windows junction 安全删除）', () => {
+  it('删除普通目录（含嵌套）', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dshw-safe-'))
+    fs.mkdirSync(path.join(dir, 'a', 'b'), { recursive: true })
+    fs.writeFileSync(path.join(dir, 'a', 'b', 'x.txt'), 'x')
+    safeRemoveDir(dir)
+    expect(fs.existsSync(dir)).toBe(false)
+  })
+
+  it('删除 junction 只删链接不删目标内容', () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'dshw-safe-'))
+    const target = path.join(base, 'target')
+    const holder = path.join(base, 'holder')
+    fs.mkdirSync(target, { recursive: true })
+    fs.writeFileSync(path.join(target, 'keep.txt'), 'keep')
+    fs.mkdirSync(holder, { recursive: true })
+    if (process.platform !== 'win32') return // junction 仅 Windows
+    try {
+      fs.symlinkSync(target, path.join(holder, 'link'), 'junction')
+      expect(fs.existsSync(path.join(holder, 'link', 'keep.txt'))).toBe(true)
+      safeRemoveDir(holder)
+      expect(fs.existsSync(holder)).toBe(false)
+      expect(fs.existsSync(path.join(target, 'keep.txt'))).toBe(true) // 目标内容保留
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true })
+    }
+  })
+})
 
 describe('pickLatestLts（nodejs.org index.json 选版）', () => {
   it('取首个带 LTS 标记的版本（列表按新到旧）', () => {

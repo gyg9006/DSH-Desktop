@@ -13,7 +13,7 @@ import { logger } from './logger'
 import { getWorkspaceDir, readAppConfig, updateAppConfig } from './config'
 import { buildDshEnv } from './envCheck'
 import { resolveEnvTool, bundledToolPath } from './env-resolver'
-import { runInstall } from './installer'
+import { runInstall, safeRemoveDir } from './installer'
 import { runCommand, killProcessTree } from './utils/process'
 import { readApiConfig, buildProxyEnv } from './apiConfig'
 import { collectProviderEnv } from './modelsDshSync'
@@ -104,6 +104,46 @@ export function resolveDshBin(workspaceDir: string): string | null {
   } catch {
     return null
   }
+}
+
+/** 从 fromDir 向上沿 node_modules 链解析依赖是否存在。 */
+function resolveDependency(fromDir: string, dep: string): boolean {
+  let dir = fromDir
+  for (;;) {
+    if (fs.existsSync(path.join(dir, 'node_modules', dep))) return true
+    const parent = path.dirname(dir)
+    if (parent === dir) return false
+    dir = parent
+  }
+}
+
+/**
+ * 检测工作区 dsh 安装是否损坏（历史 symlink 安装无依赖 / 依赖缺失）。
+ * 损坏时启动服务会自动清理重装（复制 + 包内 npm install）。
+ */
+export function dshInstallBroken(workspaceDir: string): boolean {
+  const pkgDir = path.join(workspaceDir, 'runtime', 'dsh', 'node_modules', '@deepseek-ai', 'dsh')
+  const pkgPath = path.join(pkgDir, 'package.json')
+  // 先检测 symlink/junction（v2.1.3 的 file:link 安装产物）——existsSync 会跟随链接，
+  // 空链接目标会被误判为"未安装"，必须用 lstatSync 先查
+  try {
+    if (fs.lstatSync(pkgDir).isSymbolicLink()) return true
+  } catch {
+    return false // 目录不存在 → 未安装（走自动启用分支）
+  }
+  if (!fs.existsSync(pkgPath)) return false
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { dependencies?: Record<string, string> }
+    const deps = Object.keys(pkg.dependencies ?? {})
+    if (deps.length === 0) return true
+    // 抽查前 3 个依赖能否从包目录解析（bin.js 启动必用，如 @deepseek-ai/dsh-app-boot）
+    for (const d of deps.slice(0, 3)) {
+      if (!resolveDependency(pkgDir, d)) return true
+    }
+  } catch {
+    return true
+  }
+  return false
 }
 
 /** 从 start 起探测第一个空闲端口（127.0.0.1）。 */
@@ -204,6 +244,13 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
   // dsh 启动入口动态解析（版本升级兼容）：读取 dsh 包 package.json 的 bin 字段，
   // 避免硬编码 lib/bin.js 在 dsh 升级改包结构后失效。
   let dshBin = resolveDshBin(workspaceDir)
+  if (dshBin && dshInstallBroken(workspaceDir)) {
+    // 历史坏安装：v2.1.3 的 npm install <dir> --prefix 是 file:link 语义（symlink 指向内置且不装依赖）
+    // → 启动即 ERR_MODULE_NOT_FOUND。自动清掉并重新启用（复制 + 包内 npm install 装依赖）
+    pushLog('检测到 dsh 安装不完整（历史 symlink 安装），正在重新启用内置 dsh…')
+    safeRemoveDir(path.join(workspaceDir, 'runtime', 'dsh'))
+    dshBin = null
+  }
   if (!dshBin && bundledToolPath('dsh')) {
     // 内置 dsh 可用但未安装到工作区 → 自动启用（内置主包 + 依赖安装，免手动一键安装）
     pushLog('检测到内置 dsh，正在自动启用（免手动安装）…')

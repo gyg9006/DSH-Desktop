@@ -157,6 +157,7 @@ export function createMainWindow(workspaceDir: string, theme: ThemeMode): Browse
     win.hide()
   })
   win.on('close', () => {
+    logger.info('主窗口 close 事件')
     if (saveTimer) clearTimeout(saveTimer)
     try {
       writeWindowState({

@@ -129,10 +129,9 @@ describe('dshInstallBroken（历史 symlink/依赖缺失检测）', () => {
 })
 
 describe('resolveSystemDshBin（系统 dsh 解析）', () => {
-  it('返回系统 dsh bin 路径或 null（不抛异常）', () => {
+  it('返回系统 dsh bin 路径或 null（不抛异常；CI 无 npx dsh 时返回 null）', () => {
     const bin = resolveSystemDshBin()
-    // 有系统 dsh（全局/npx 缓存）→ 返回 bin.js 路径；没有 → null。两者均合法，关键是稳定不抛
-    expect(typeof bin).toBe('string')
+    expect(bin === null || typeof bin === 'string').toBe(true)
   })
 
   it('连续调用结果稳定（幂等）', () => {

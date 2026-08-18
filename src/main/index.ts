@@ -7,6 +7,9 @@
  * - 创建主窗口。
  */
 import { app, dialog, globalShortcut, Menu } from 'electron'
+import { spawnSync } from 'node:child_process'
+import fs from 'node:fs'
+import path from 'node:path'
 import { initializeRuntime, getWorkspaceDir, getEffectiveTheme, redirectUserDataPaths, readAppConfig } from './config'
 import { logger } from './logger'
 import { createMainWindow, getMainWindow } from './window'
@@ -30,8 +33,39 @@ const BACKGROUND_MODE = process.argv.includes('--background')
 // 否则 %APPDATA% 会出现残留（规格 9.3）
 redirectUserDataPaths()
 
-// 单实例：重复启动时聚焦已有窗口
-const gotLock = app.requestSingleInstanceLock()
+// 单实例：重复启动时聚焦已有窗口。
+// 锁失败可能来自：① 另一实例在跑（正常 → 聚焦后退出）；② 锁残留（上次强杀/异常退出，
+// Electron SingletonLock 未清理）→ 无其他实例时清理锁后重试一次，避免「启动即退」。
+function acquireSingleInstanceLock(): boolean {
+  if (app.requestSingleInstanceLock()) return true
+  try {
+    const me = process.pid
+    const list = spawnSync(
+      'tasklist',
+      ['/FI', 'IMAGENAME eq DSH-Desktop.exe', '/FO', 'CSV', '/NH'],
+      { encoding: 'utf8', timeout: 15000, windowsHide: true }
+    )
+    const hasOther = String(list.stdout ?? '')
+      .split(/\r?\n/)
+      .filter((l) => /DSH-Desktop\.exe/i.test(l))
+      .some((l) => !new RegExp(`"${me}"`).test(l))
+    if (hasOther) return false // 确有另一实例在跑 → 退出（聚焦由 second-instance 处理）
+    // 无其他实例：锁残留 → 清理后重试一次
+    const ud = app.getPath('userData')
+    for (const f of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+      try {
+        fs.rmSync(path.join(ud, f), { force: true })
+      } catch {
+        /* 忽略 */
+      }
+    }
+    return app.requestSingleInstanceLock()
+  } catch {
+    return false
+  }
+}
+
+const gotLock = acquireSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
@@ -142,10 +176,12 @@ if (!gotLock) {
   let quitting = false
 
   app.on('window-all-closed', () => {
+    logger.info('window-all-closed → 退出应用')
     app.quit()
   })
 
   app.on('before-quit', (event) => {
+    logger.info(`before-quit（quitting=${quitting}）`)
     if (quitting) return
     event.preventDefault()
     quitting = true

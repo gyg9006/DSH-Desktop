@@ -114,7 +114,7 @@ export function createMainWindow(workspaceDir: string, theme: ThemeMode): Browse
     frame: false, // v2.0 自定义无边框标题栏
     backgroundColor: backgroundColorFor(theme, workspaceDir),
     autoHideMenuBar: true,
-    title: 'DSH 桌面',
+    title: 'DSH-Desktop',
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -198,7 +198,7 @@ export function createMainWindow(workspaceDir: string, theme: ThemeMode): Browse
     dialog
       .showMessageBox(win, {
         type: 'error',
-        title: 'DSH 桌面 遇到问题',
+        title: 'DSH-Desktop 遇到问题',
         message: '界面加载失败，可重试或关闭应用。',
         detail: `错误码 ${errorCode}：${errorDescription}\n地址：${validatedURL}\n详细信息已写入工作文件夹的日志。`,
         buttons: ['重试', '关闭']
@@ -221,7 +221,7 @@ export function createMainWindow(workspaceDir: string, theme: ThemeMode): Browse
     dialog
       .showMessageBox(win, {
         type: 'error',
-        title: 'DSH 桌面 遇到问题',
+        title: 'DSH-Desktop 遇到问题',
         message: '界面渲染进程异常退出，正在重新加载。',
         detail: `reason: ${details.reason}（exit code ${details.exitCode}）`,
         buttons: ['重新加载']

@@ -134,7 +134,7 @@ describe('打包内置便携环境（P3）', () => {
     fs.writeFileSync(path.join(dir, 'env-manifest.json'), '{bad json')
     expect(readEnvManifest(dir)).toBeNull()
     fs.writeFileSync(path.join(dir, 'env-manifest.json'), JSON.stringify({ node: { version: 'v24.0.0', archive: 'n.zip' } }))
-    expect(readEnvManifest(dir)?.node?.version).toBe('v24.0.0')
+    expect((readEnvManifest(dir)?.node as { version?: string } | undefined)?.version).toBe('v24.0.0')
   })
 
   it('verifySha256 / sha256Of：哈希匹配判定', () => {
@@ -178,8 +178,8 @@ describe('打包内置便携环境（P3）', () => {
   })
 })
 
-describe('内置便携环境端到端（真实归档）', () => {
-  it('runInstall node 使用内置归档完成安装（免下载、sha256 校验、解压、验证、替换）', async () => {
+describe('内置便携环境端到端（真实内置包）', () => {
+  it('runInstall node 使用内置环境完成安装（免下载、复制/解压、验证、替换）', async () => {
     const envDir = path.join(process.cwd(), 'resources', 'portable-env')
     if (!fs.existsSync(path.join(envDir, 'env-manifest.json'))) {
       // 未生成内置包（未执行 prepare:env）时跳过，避免 CI 假失败

@@ -18,8 +18,9 @@ import { scheduleAutoUpdate, stopAutoUpdateSchedule } from './updater'
 import { scheduleAutoSync, stopAutoSyncSchedule } from './smartSync'
 import { syncNativeThemeFromActive } from './theme'
 import { syncModelsConfigToDsh, syncKeysToCredentials } from './modelsDshSync'
+import { hasBundledEnv } from './env-resolver'
 
-app.setName('DSH 桌面')
+app.setName('DSH-Desktop')
 app.setAppUserModelId('com.dshworkbench.app')
 
 /** 开机自启后台模式（规格 6.14：仅后台服务 + 托盘，不弹主窗口） */
@@ -51,7 +52,7 @@ if (!gotLock) {
       dialog
         .showMessageBox(win, {
           type: 'error',
-          title: 'DSH 桌面 遇到问题',
+          title: 'DSH-Desktop 遇到问题',
           message: '主进程发生未捕获异常，详细信息已写入工作文件夹的日志。',
           detail: String(error?.message ?? error),
           buttons: ['确定']
@@ -69,6 +70,13 @@ if (!gotLock) {
 
     const workspaceDir = initializeRuntime()
     logger.info(`应用启动 v${app.getVersion()}，打包模式：${app.isPackaged ? '是' : '否'}${BACKGROUND_MODE ? '，后台模式' : ''}`)
+
+    // P3：环境解析（内置/工作区/系统三级），检测面板与一键安装共用
+    try {
+      logger.info(`环境解析就绪（内置便携环境：${hasBundledEnv() ? '可用' : '无'}）`)
+    } catch (error) {
+      logger.warn(`环境解析检查失败：${String(error)}`)
+    }
 
     // 主题全局化：启动时同步 nativeTheme（暗/亮随激活主题）
     syncNativeThemeFromActive(workspaceDir)

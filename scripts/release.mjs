@@ -61,9 +61,16 @@ if (dryRun) {
   process.exit(0)
 }
 
-// 用系统 tar（Windows 10+ bsdtar）打包 zip：-a 按扩展名自动选压缩器
+// 用系统 tar（Windows 10+ bsdtar）打包 zip：-a 按扩展名自动选压缩器。
+// 文件清单经 -T 从文件读取（内置便携环境解压后文件数千计，直接传参超 Windows 命令行长度限制）。
 if (fs.existsSync(zipPath)) fs.rmSync(zipPath, { force: true })
-execFileSync('tar', ['-a', '-c', '-f', zipPath, ...files.map((f) => `./${f}`)], { cwd: appDir, stdio: 'inherit' })
+const listFile = path.join(appDir, '.zip-filelist.tmp')
+fs.writeFileSync(listFile, files.map((f) => `./${f}`).join('\n'), 'utf8')
+try {
+  execFileSync('tar', ['-a', '-c', '-f', zipPath, '-T', listFile], { cwd: appDir, stdio: 'inherit' })
+} finally {
+  fs.rmSync(listFile, { force: true })
+}
 const size = fs.statSync(zipPath).size
 console.log(`更新包已生成：${zipPath}（${(size / 1024 / 1024).toFixed(1)} MB）`)
 

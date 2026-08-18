@@ -215,9 +215,14 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps): JSX.Ele
     }
   }, [toast, onComplete])
 
-  const envStateOf = (key: EnvItemKey): { state: string; version: string | null; source: string } => {
+  const envStateOf = (key: EnvItemKey): { state: string; version: string | null; source: string; bundledAvailable: boolean } => {
     const item = env?.items.find((i) => i.key === key)
-    return { state: item?.state ?? 'error', version: item?.version ?? null, source: item?.source ?? 'none' }
+    return {
+      state: item?.state ?? 'error',
+      version: item?.version ?? null,
+      source: item?.source ?? 'none',
+      bundledAvailable: item?.bundledAvailable ?? false
+    }
   }
 
   return (
@@ -294,7 +299,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps): JSX.Ele
               <>
                 <div className="space-y-2">
                   {(Object.keys(ENV_NAMES) as EnvItemKey[]).map((key) => {
-                    const { state, version, source } = envStateOf(key)
+                    const { state, version, source, bundledAvailable } = envStateOf(key)
                     const busy = installBusy === key
                     return (
                       <div key={key} className="flex items-center gap-3 rounded-lg border border-cyber-border bg-cyber-panel px-3 py-2.5">
@@ -313,8 +318,9 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps): JSX.Ele
                           <div className="text-xs font-medium text-cyber-text">{ENV_NAMES[key]}</div>
                           <div className="text-[10px] text-cyber-dim">
                             {version ?? (state === 'ok' ? '已安装' : '未安装')}
-                            {source === 'portable' && ' · 便携版'}
-                            {source === 'system' && ' · 系统'}
+                            {source === 'bundled' && ' · [内置]'}
+                            {source === 'portable' && ' · [工作区]'}
+                            {source === 'system' && ' · [系统]'}
                           </div>
                           {busy && installEvent && (
                             <div className="mt-1.5 space-y-1">
@@ -330,9 +336,10 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps): JSX.Ele
                             size="sm"
                             variant={state === 'incompatible' ? 'violet' : 'default'}
                             onClick={() => void runInstall(key, installModeFor(key))}
+                            title={bundledAvailable && state === 'missing' ? '使用客户端内置便携环境，免下载' : undefined}
                           >
                             <PlugZap className="h-3.5 w-3.5" />
-                            {state === 'incompatible' ? '更新' : '一键安装'}
+                            {state === 'incompatible' ? '更新' : bundledAvailable ? '启用内置环境' : '一键安装'}
                           </Button>
                         )}
                         {busy && (

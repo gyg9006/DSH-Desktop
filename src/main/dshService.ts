@@ -12,6 +12,7 @@ import path from 'node:path'
 import { logger } from './logger'
 import { getWorkspaceDir, readAppConfig, updateAppConfig } from './config'
 import { buildDshEnv } from './envCheck'
+import { resolveEnvTool } from './env-resolver'
 import { runCommand, killProcessTree } from './utils/process'
 import { readApiConfig, buildProxyEnv } from './apiConfig'
 import { collectProviderEnv } from './modelsDshSync'
@@ -197,14 +198,22 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
     return { ok: false, error: '服务已在运行' }
   }
   const workspaceDir = getWorkspaceDir()
-  const nodeExe = path.join(workspaceDir, 'runtime', 'node', 'node.exe')
+  const config = readAppConfig()
+  const svc = (config.service ?? {}) as ServiceConfig
   // dsh 启动入口动态解析（版本升级兼容）：读取 dsh 包 package.json 的 bin 字段，
   // 避免硬编码 lib/bin.js 在 dsh 升级改包结构后失效。
   const dshBin = resolveDshBin(workspaceDir)
   if (!dshBin) {
     return { ok: false, error: '未安装 DeepSeek Harness（dsh）。请在「设置 → 环境检测」中一键安装' }
   }
-  if (!fs.existsSync(nodeExe)) {
+  // Node 解析（规格 6.15 + P3 修复）：useSystemNode 显式优先；
+  // 否则按 env-resolver 三级：内置便携（resources/portable-env/node）→ 工作区便携 → 系统
+  const nodeTool = resolveEnvTool(workspaceDir, 'node')
+  let nodeRunner: string
+  if (svc.useSystemNode === true) nodeRunner = 'node'
+  else if (nodeTool.source === 'bundled' || nodeTool.source === 'portable') nodeRunner = nodeTool.binPath!
+  else if (nodeTool.source === 'system') nodeRunner = 'node'
+  else {
     return { ok: false, error: '未安装便携 Node.js。请在「设置 → 环境检测」中一键安装' }
   }
 
@@ -222,8 +231,6 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
   }
 
   // 端口：auto 探测 / fixed 校验（被占用时自动顺延到下一个空闲端口）
-  const config = readAppConfig()
-  const svc = (config.service ?? {}) as ServiceConfig
   let port: number
   try {
     if (svc.portMode === 'fixed' && typeof svc.port === 'number' && svc.port > 0) {
@@ -260,9 +267,9 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
   for (const [k, v] of Object.entries(proxy.vars)) env[k] = v
   for (const k of proxy.remove) delete env[k]
 
-  // 启动参数（规格 6.11：默认 web，可追加）与 Node 选择（规格 6.15）
+  // 启动参数（规格 6.11：默认 web，可追加）与 Node 选择（规格 6.15 + 内置/工作区/系统三级）
   const extraArgs = Array.isArray(svc.extraArgs) && svc.extraArgs.length > 0 ? svc.extraArgs : ['web']
-  const runner = svc.useSystemNode === true ? 'node' : nodeExe
+  const runner = nodeRunner
   const launchArgs = [dshBin, ...extraArgs, '--port', String(port)]
   pushLog(`启动命令：${runner} ${launchArgs.join(' ')}`)
 

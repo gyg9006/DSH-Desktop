@@ -112,7 +112,12 @@ function EnvCard(): JSX.Element {
               {item.name}
             </span>
             <span className="flex items-center gap-2">
-              <span className="font-mono text-[11px] text-cyber-dim">{item.version ?? '未安装'}</span>
+              <span className="font-mono text-[11px] text-cyber-dim">
+                {item.version ?? '未安装'}
+                {item.source === 'bundled' && ' · [内置]'}
+                {item.source === 'portable' && ' · [工作区]'}
+                {item.source === 'system' && ' · [系统]'}
+              </span>
               <Badge variant={item.state === 'ok' ? 'green' : 'red'} className="px-1.5 text-[10px]">
                 {item.state === 'ok' ? '就绪' : item.state === 'missing' ? '缺失' : '异常'}
               </Badge>
@@ -123,9 +128,10 @@ function EnvCard(): JSX.Element {
                   className="h-6 px-2 text-[10px]"
                   onClick={() => void install(item.key, 'install')}
                   disabled={updating !== null}
+                  title={item.bundledAvailable ? '使用客户端内置便携环境，免下载' : '从网络下载便携版安装'}
                 >
                   {updating === item.key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
-                  一键安装
+                  {item.bundledAvailable ? '启用内置环境' : '一键安装'}
                 </Button>
               ) : (
                 <Button

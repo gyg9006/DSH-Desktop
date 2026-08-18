@@ -1,5 +1,6 @@
 appId: com.dshdesktop.app
-productName: DSH 桌面
+# 产品名/可执行名必须为纯 ASCII：任何中文都会导致 exe 文件名损坏（实测 "DSH 桌面.exe" → "DSH ??.exe"）
+productName: DSH-Desktop
 electronDist: node_modules/electron/dist
 directories:
   buildResources: build
@@ -22,7 +23,7 @@ extraResources:
     filter:
       - '**/*'
 win:
-  executableName: DSH 桌面
+  executableName: DSH-Desktop
   target:
     - target: dir
       arch:
@@ -31,6 +32,8 @@ win:
   # 跳过 exe 图标/版本信息编辑与签名（避免构建期额外下载 winCodeSign/rcedit；
   # 图标与版本元数据在打包阶段再补全）
   signAndEditExecutable: false
+# 安装包文件名（未来启用 nsis 目标时生效）：纯 ASCII
+artifactName: DSH-Desktop-Setup-{version}.{ext}
 npmRebuild: false
 electronDownload:
   cache: _electron-cache

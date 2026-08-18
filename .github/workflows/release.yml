@@ -41,6 +41,17 @@ jobs:
       - name: Build + package green dir
         run: npm run pack:dir
 
+      - name: Verify build artifacts (exe name + bundled env)
+        shell: pwsh
+        run: |
+          node scripts/verify-build.mjs
+          Write-Output "--- verify-build.log ---"
+          Get-Content ..\DSH-Desktop\verify-build.log -ErrorAction SilentlyContinue
+          Write-Output "--- extraResources 内置环境清单 ---"
+          Get-ChildItem ..\DSH-Desktop\app\resources\portable-env -ErrorAction SilentlyContinue | Select-Object Name, Length
+          Write-Output "--- 交付 exe 名 ---"
+          Get-ChildItem ..\DSH-Desktop\app\*.exe -ErrorAction SilentlyContinue | Select-Object Name
+
       - name: Generate update zip
         run: node scripts/release.mjs
 

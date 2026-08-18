@@ -1,19 +1,22 @@
 /**
- * 一键安装 / 一键更新（M2，P3 增强）：
- * - Node.js：优先使用打包内置便携环境（resources/portable-env，免下载）；否则从 nodejs.org/npmmirror 获取 LTS zip；
- * - npm：随便携 Node 提供，单独更新走 npm install -g npm@latest；
- * - pnpm：优先内置 tgz；否则经便携 Node 的 corepack 启用（失败降级 npm install -g pnpm）；
- * - Git：优先内置 MinGit zip；否则官方 GitHub Releases（不可达时降级 npmmirror 镜像）；
- * - dsh：优先内置 tgz；否则 npm install @deepseek-ai/dsh --prefix runtime/dsh。
- * 全部产物落在工作文件夹内；安装/更新前备份旧版本；支持取消与实时进度；内置包经 sha256 校验。
+ * 一键安装 / 一键更新（M2，P3 增强；2026-08 修复版）：
+ * - 内置便携环境（resources/portable-env，免下载）优先：目录形态直接复制到工作区；
+ *   旧归档形态（zip/tgz）保留兼容，解压后校验再替换；
+ * - 无内置时走网络下载：Node 官方/npmmirror LTS zip、pnpm 独立二进制、
+ *   Git 官方 Releases（不可达降级 npmmirror 镜像）、dsh 经 npm install；
+ * - npm/pnpm/dsh 安装前自动确保便携 Node（内置优先，免下载），不再直接报错；
+ * - 全部产物落在工作文件夹内；安装/更新前备份旧版本；支持取消与实时进度；内置包经 sha256 校验。
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { app } from 'electron'
 import { runCommand } from './utils/process'
 import { buildRuntimeEnv } from './envCheck'
+import { portableEnvDir, readEnvManifest } from './env-resolver'
 import type { InstallKey, InstallMode } from '../shared/ipc'
+
+// 兼容旧 import（env-resolver 为权威实现）
+export { portableEnvDir, readEnvManifest }
 
 /** 安装/更新类命令超时（规格 0.5：600s）。 */
 export const INSTALL_TIMEOUT_MS = 600000
@@ -95,20 +98,6 @@ export const PORTABLE_GIT_ASSET_RE = /^PortableGit-.*-64-bit\.7z\.exe$/
 // 打包内置便携环境（P3）：resources/portable-env/ + env-manifest.json
 // ---------------------------------------------------------------------------
 
-export interface EnvManifest {
-  [key: string]: { version?: string; archive?: string; sha256?: string } | undefined
-}
-
-/** 读取 env-manifest.json；缺失/损坏返回 null。 */
-export function readEnvManifest(envDir: string): EnvManifest | null {
-  try {
-    const raw = JSON.parse(fs.readFileSync(path.join(envDir, 'env-manifest.json'), 'utf8')) as EnvManifest
-    return raw && typeof raw === 'object' ? raw : null
-  } catch {
-    return null
-  }
-}
-
 /** 计算文件 sha256（hex）。 */
 export function sha256Of(file: string): string {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
@@ -124,42 +113,66 @@ export function verifySha256(file: string, expected: string | undefined): boolea
   }
 }
 
-/** 从内置目录解析某组件的归档；未内置返回 null。 */
+/** 内置组件的两种形态：解压目录（新，dirPath）或原始归档（旧，archivePath）。 */
+export interface BundledTool {
+  version: string
+  dirPath?: string
+  archivePath?: string
+  sha256?: string
+}
+
+/** 从内置目录解析某组件的归档（旧形态兼容；缺失返回 null）。 */
 export function bundledArchive(envDir: string | null, key: InstallKey): { archivePath: string; version: string; sha256: string } | null {
   if (!envDir) return null
   const manifest = readEnvManifest(envDir)
   const entry = manifest?.[key]
-  if (!entry?.archive || !entry.version) return null
+  if (!entry || typeof entry === 'string') return null
+  if (!entry.archive || !entry.version) return null
   const archivePath = path.join(envDir, entry.archive)
   if (!fs.existsSync(archivePath)) return null
   return { archivePath, version: entry.version, sha256: entry.sha256 ?? '' }
 }
 
 /**
- * 定位打包内置环境目录：
- * 1. 环境变量 DSH_PORTABLE_ENV_DIR（测试/自定义覆盖）；
- * 2. 打包后：<resources>/portable-env（extraResources 解包到 asar 外）；
- * 3. 开发时：<项目根>/resources/portable-env。
+ * 解析内置环境中某组件：优先解压目录形态（env-manifest.dir，新包），
+ * 回退原始归档形态（env-manifest.archive，旧包兼容）。未内置返回 null。
  */
-export function portableEnvDir(): string | null {
-  const override = process.env['DSH_PORTABLE_ENV_DIR']
-  if (override && fs.existsSync(path.join(override, 'env-manifest.json'))) return override
-  const candidates: string[] = []
-  try {
-    if (app.isPackaged && process.resourcesPath) candidates.push(path.join(process.resourcesPath, 'portable-env'))
-    else candidates.push(path.join(app.getAppPath(), 'resources', 'portable-env'))
-  } catch {
-    /* electron app 未就绪 */
+function bundled(key: InstallKey): BundledTool | null {
+  const envDir = portableEnvDir()
+  if (!envDir) return null
+  const manifest = readEnvManifest(envDir)
+  const entry = manifest?.[key]
+  if (!entry || typeof entry === 'string') return null
+  if (!entry.version) return null
+  if (entry.dir) {
+    const dirAbs = path.join(envDir, entry.dir)
+    if (fs.existsSync(dirAbs)) return { version: entry.version, dirPath: dirAbs }
   }
-  for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, 'env-manifest.json'))) return dir
+  if (entry.archive) {
+    const archivePath = path.join(envDir, entry.archive)
+    if (fs.existsSync(archivePath)) return { version: entry.version, archivePath, sha256: entry.sha256 ?? '' }
   }
   return null
 }
 
-/** 在当前内置环境中查找某组件的归档（便捷封装）。 */
-function bundled(key: InstallKey): { archivePath: string; version: string; sha256: string } | null {
-  return bundledArchive(portableEnvDir(), key)
+/**
+ * 解压后目录中定位包含 target 相对路径的根目录（一层探测）。
+ * 例：node 归档解压出 node-v24.19.0-win-x64/ 带前缀 → 返回该目录。
+ */
+export function findRootWith(staging: string, rel: string): string | null {
+  if (fs.existsSync(path.join(staging, rel))) return staging
+  let entries: fs.Dirent[]
+  try {
+    entries = fs.readdirSync(staging, { withFileTypes: true })
+  } catch {
+    return null
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const candidate = path.join(staging, entry.name)
+    if (fs.existsSync(path.join(candidate, rel))) return candidate
+  }
+  return null
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +196,16 @@ function cleanup(...paths: string[]): void {
 /** 安装子进程环境：便携运行时 PATH + npm/corepack 缓存收敛到工作文件夹（见 envCheck.buildRuntimeEnv）。 */
 function buildInstallEnv(workspaceDir: string): NodeJS.ProcessEnv {
   return buildRuntimeEnv(workspaceDir)
+}
+
+/** 确保工作区便携 Node 可用；缺失时优先启用内置 Node（免下载）。 */
+async function ensureNode(workspaceDir: string, cbs: InstallCallbacks, signal: AbortSignal): Promise<void> {
+  const nodeExe = path.join(workspaceDir, 'runtime', 'node', process.platform === 'win32' ? 'node.exe' : 'node.exe')
+  if (fs.existsSync(nodeExe)) return
+  const bundledNode = bundled('node')
+  if (!bundledNode) throw new InstallError('未找到便携 Node（请先安装 Node.js）')
+  cbs.log('未检测到便携 Node，先启用内置 Node.js（免下载）…')
+  await installNode(workspaceDir, 'install', cbs, signal)
 }
 
 /** 下载文件（支持进度回调与取消；网络异常给出中文原因）。 */
@@ -300,32 +323,43 @@ async function installNode(
   const downloadsDir = path.join(workspaceDir, 'runtime', '.downloads')
   const action = mode === 'update' ? '更新' : '安装'
   const bundledNode = bundled('node')
+  const nodeExeRel = process.platform === 'win32' ? 'node.exe' : path.join('bin', 'node')
 
   let version: string
-  let zipPath: string
-  if (bundledNode) {
-    version = bundledNode.version
-    cbs.log(`使用内置便携环境：Node.js ${version}（免下载）`)
-    zipPath = bundledNode.archivePath
-    if (!verifySha256(zipPath, bundledNode.sha256)) {
-      throw new InstallError('内置 Node.js 校验失败（sha256 不匹配），请重新打包或改用网络安装')
-    }
-  } else {
-    version = await fetchLatestLtsVersion(cbs, signal)
-    cbs.log(`开始${action} Node.js ${version}`)
-    zipPath = path.join(downloadsDir, `node-${version}-win-x64.zip`)
-    await downloadFile(nodeZipUrl(version), zipPath, cbs, signal)
-    throwIfCancelled(signal)
-  }
-
-  const staging = path.join(workspaceDir, 'runtime', `.node-staging-${Date.now()}`)
+  let staging = path.join(workspaceDir, 'runtime', `.node-staging-${Date.now()}`)
   try {
-    fs.mkdirSync(staging, { recursive: true })
-    await extractZip(zipPath, staging, cbs, signal)
-    throwIfCancelled(signal)
+    if (bundledNode) {
+      version = bundledNode.version
+      if (bundledNode.dirPath) {
+        // 新形态：内置解压目录 → 免下载直接复制
+        cbs.log(`使用内置便携环境：Node.js ${version}（免下载，直接复制）`)
+        fs.mkdirSync(staging, { recursive: true })
+        fs.cpSync(bundledNode.dirPath, staging, { recursive: true })
+      } else {
+        // 旧形态：内置归档 → 解压 + 提升带版本前缀的根目录
+        cbs.log(`使用内置便携环境：Node.js ${version}（免下载）`)
+        if (!verifySha256(bundledNode.archivePath!, bundledNode.sha256)) {
+          throw new InstallError('内置 Node.js 校验失败（sha256 不匹配），请重新打包或改用网络安装')
+        }
+        fs.mkdirSync(staging, { recursive: true })
+        await extractZip(bundledNode.archivePath!, staging, cbs, signal)
+        throwIfCancelled(signal)
+        liftRoot(staging, nodeExeRel)
+      }
+    } else {
+      version = await fetchLatestLtsVersion(cbs, signal)
+      cbs.log(`开始${action} Node.js ${version}`)
+      const zipPath = path.join(downloadsDir, `node-${version}-win-x64.zip`)
+      await downloadFile(nodeZipUrl(version), zipPath, cbs, signal)
+      throwIfCancelled(signal)
+      fs.mkdirSync(staging, { recursive: true })
+      await extractZip(zipPath, staging, cbs, signal)
+      throwIfCancelled(signal)
+      liftRoot(staging, nodeExeRel)
+      cleanup(zipPath)
+    }
 
-    const extractedDir = path.join(staging, `node-${version}-win-x64`)
-    const nodeExe = path.join(extractedDir, 'node.exe')
+    const nodeExe = path.join(staging, nodeExeRel)
     if (!fs.existsSync(nodeExe)) {
       throw new InstallError('解压后未找到 node.exe，安装包可能不完整或已损坏')
     }
@@ -335,12 +369,23 @@ async function installNode(
     const verified = check.stdout.trim()
     cbs.log(`校验通过：${verified}`)
 
-    swapWithBackup(extractedDir, nodeDir, path.join(workspaceDir, 'runtime', 'node.bak'), 'Node.js')
+    swapWithBackup(staging, nodeDir, path.join(workspaceDir, 'runtime', 'node.bak'), 'Node.js')
     cbs.log(`Node.js ${verified} ${action}完成（旧版本已备份至 runtime/node.bak）`)
+    staging = ''
   } finally {
-    cleanup(staging)
-    if (!bundledNode) cleanup(zipPath)
+    if (staging) cleanup(staging)
   }
+}
+
+/** 把解压目录中带一层版本前缀的根提升到 staging 根（如 node-v24.19.0-win-x64/ → 根）。 */
+function liftRoot(staging: string, rel: string): void {
+  const root = findRootWith(staging, rel)
+  if (!root || root === staging) return
+  const tmp = path.join(path.dirname(staging), `.lift-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`)
+  fs.renameSync(root, tmp)
+  for (const e of fs.readdirSync(staging)) fs.rmSync(path.join(staging, e), { recursive: true, force: true })
+  for (const e of fs.readdirSync(tmp)) fs.renameSync(path.join(tmp, e), path.join(staging, e))
+  fs.rmdirSync(tmp)
 }
 
 /** 便携 Node 的 JS 入口执行器：node.exe <nodeDir>/<script> <args>（绕开 .cmd 的 shell 解析，最稳）。 */
@@ -372,9 +417,22 @@ async function installNpm(
   signal: AbortSignal
 ): Promise<void> {
   const nodeDir = path.join(workspaceDir, 'runtime', 'node')
-  const nodeExe = path.join(nodeDir, 'node.exe')
-  if (!fs.existsSync(nodeExe)) throw new InstallError('未找到便携 Node（请先安装 Node.js）')
+  await ensureNode(workspaceDir, cbs, signal)
   const action = mode === 'update' ? '更新' : '安装'
+  // 便携 Node 自带 npm：install 模式直接验证就绪，免网络更新
+  const npmCli = path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')
+  if (mode === 'install' && fs.existsSync(npmCli)) {
+    const ready = await runCommand({
+      command: path.join(nodeDir, 'npm.cmd'),
+      args: ['--version'],
+      timeoutMs: DETECT_TIMEOUT_MS,
+      env: buildInstallEnv(workspaceDir)
+    })
+    if (!ready.error) {
+      cbs.log(`npm ${ready.stdout.trim()} 已就绪（随便携 Node 提供，免下载）`)
+      return
+    }
+  }
   cbs.log(`开始${action} npm（经便携 Node）…`)
   const { command, args } = npmCliArgs(nodeDir, ['install', '-g', 'npm@latest', '--no-audit', '--no-fund'])
   const result = await runCommand({
@@ -404,34 +462,46 @@ async function installPnpm(
   signal: AbortSignal
 ): Promise<void> {
   const nodeDir = path.join(workspaceDir, 'runtime', 'node')
-  const nodeExe = path.join(nodeDir, 'node.exe')
   const corepackJs = path.join(nodeDir, 'node_modules', 'corepack', 'dist', 'corepack.js')
   const pnpmCmd = path.join(nodeDir, 'pnpm.cmd')
   const env = buildInstallEnv(workspaceDir)
   const action = mode === 'update' ? '更新' : '安装'
+  await ensureNode(workspaceDir, cbs, signal)
   cbs.log(`开始${action} pnpm…`)
-
-  if (!fs.existsSync(nodeExe)) throw new InstallError('未找到便携 Node（请先安装 Node.js）')
 
   const bundledPnpm = bundled('pnpm')
   if (bundledPnpm) {
-    // 内置 pnpm tgz：npm install -g <tgz>（免下载）
-    cbs.log(`使用内置便携环境：pnpm ${bundledPnpm.version}（免下载）`)
-    if (!verifySha256(bundledPnpm.archivePath, bundledPnpm.sha256)) {
-      throw new InstallError('内置 pnpm 校验失败（sha256 不匹配），请重新打包或改用网络安装')
+    if (bundledPnpm.dirPath) {
+      // 新形态：内置 pnpm 独立二进制 → 复制到便携 Node 目录 + 生成 pnpm.cmd 包装
+      cbs.log(`使用内置便携环境：pnpm ${bundledPnpm.version}（免下载，直接复制）`)
+      const srcExe = path.join(bundledPnpm.dirPath, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
+      if (!fs.existsSync(srcExe)) throw new InstallError(`内置 pnpm 可执行文件缺失：${srcExe}`)
+      fs.mkdirSync(nodeDir, { recursive: true })
+      const destExe = path.join(nodeDir, process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
+      fs.copyFileSync(srcExe, destExe)
+      if (process.platform !== 'win32') fs.chmodSync(destExe, 0o755)
+      if (process.platform === 'win32') {
+        fs.writeFileSync(path.join(nodeDir, 'pnpm.cmd'), '@echo off\r\n"%~dp0pnpm.exe" %*\r\n', 'utf8')
+      }
+    } else {
+      // 旧形态：内置 pnpm tgz：npm install -g <tgz>（免下载）
+      cbs.log(`使用内置便携环境：pnpm ${bundledPnpm.version}（免下载）`)
+      if (!verifySha256(bundledPnpm.archivePath!, bundledPnpm.sha256)) {
+        throw new InstallError('内置 pnpm 校验失败（sha256 不匹配），请重新打包或改用网络安装')
+      }
+      const { command, args } = npmCliArgs(nodeDir, ['install', '-g', bundledPnpm.archivePath!, '--no-audit', '--no-fund'])
+      const result = await runCommand({
+        command,
+        args,
+        cwd: nodeDir,
+        env,
+        timeoutMs: INSTALL_TIMEOUT_MS,
+        signal,
+        onStdout: (chunk) => cbs.log(chunk.trim())
+      })
+      if (result.aborted) throw new InstallCancelledError()
+      if (result.error) throw new InstallError(`pnpm ${action}失败：${result.error}`)
     }
-    const { command, args } = npmCliArgs(nodeDir, ['install', '-g', bundledPnpm.archivePath, '--no-audit', '--no-fund'])
-    const result = await runCommand({
-      command,
-      args,
-      cwd: nodeDir,
-      env,
-      timeoutMs: INSTALL_TIMEOUT_MS,
-      signal,
-      onStdout: (chunk) => cbs.log(chunk.trim())
-    })
-    if (result.aborted) throw new InstallCancelledError()
-    if (result.error) throw new InstallError(`pnpm ${action}失败：${result.error}`)
   } else if (!fs.existsSync(corepackJs)) {
     cbs.log('corepack 不可用，降级为 npm 全局安装 pnpm…')
     const { command, args } = npmCliArgs(nodeDir, [
@@ -591,15 +661,22 @@ async function installGit(
   let sfxPath: string | null = null
   try {
     if (bundledGit) {
-      // 内置 MinGit zip：免下载 + sha256 校验 + tar 解压
       version = bundledGit.version
-      cbs.log(`使用内置便携环境：Git ${version}（免下载）`)
-      if (!verifySha256(bundledGit.archivePath, bundledGit.sha256)) {
-        throw new InstallError('内置 Git 校验失败（sha256 不匹配），请重新打包或改用网络安装')
+      if (bundledGit.dirPath) {
+        // 新形态：内置 MinGit 解压目录 → 免下载直接复制
+        cbs.log(`使用内置便携环境：Git ${version}（免下载，直接复制）`)
+        fs.mkdirSync(staging, { recursive: true })
+        fs.cpSync(bundledGit.dirPath, staging, { recursive: true })
+      } else {
+        // 旧形态：内置 MinGit zip → 解压
+        cbs.log(`使用内置便携环境：Git ${version}（免下载）`)
+        if (!verifySha256(bundledGit.archivePath!, bundledGit.sha256)) {
+          throw new InstallError('内置 Git 校验失败（sha256 不匹配），请重新打包或改用网络安装')
+        }
+        fs.mkdirSync(staging, { recursive: true })
+        await extractZip(bundledGit.archivePath!, staging, cbs, signal)
+        throwIfCancelled(signal)
       }
-      fs.mkdirSync(staging, { recursive: true })
-      await extractZip(bundledGit.archivePath, staging, cbs, signal)
-      throwIfCancelled(signal)
     } else {
       const fetched = await fetchLatestGit(cbs, signal)
       version = fetched.version
@@ -671,37 +748,66 @@ async function installDsh(
   signal: AbortSignal
 ): Promise<void> {
   const nodeDir = path.join(workspaceDir, 'runtime', 'node')
-  const nodeExe = path.join(nodeDir, 'node.exe')
   const dshDir = path.join(workspaceDir, 'runtime', 'dsh')
-  if (!fs.existsSync(nodeExe)) throw new InstallError('未找到便携 Node（请先安装 Node.js）')
+  await ensureNode(workspaceDir, cbs, signal)
   const action = mode === 'update' ? '更新' : '安装'
 
   const bundledDsh = bundled('dsh')
-  let pkg: string
-  if (bundledDsh) {
+  if (bundledDsh?.dirPath) {
+    // 新形态：内置 dsh-cli 解压目录 → npm install <dir>（免下载主包，自动解析 dependencies）
+    cbs.log(`使用内置便携环境：dsh ${bundledDsh.version}（免下载主包，安装依赖中…）`)
+    if (!fs.existsSync(path.join(bundledDsh.dirPath, 'package.json'))) {
+      throw new InstallError('内置 dsh 包缺少 package.json')
+    }
+    fs.mkdirSync(dshDir, { recursive: true })
+    const { command, args } = npmCliArgs(nodeDir, ['install', bundledDsh.dirPath, '--prefix', dshDir, '--no-audit', '--no-fund'])
+    const result = await runCommand({
+      command,
+      args,
+      cwd: dshDir,
+      env: buildInstallEnv(workspaceDir),
+      timeoutMs: INSTALL_TIMEOUT_MS,
+      signal,
+      onStdout: (chunk) => cbs.log(chunk.trim())
+    })
+    if (result.aborted) throw new InstallCancelledError()
+    if (result.error) throw new InstallError(`dsh ${action}失败：${result.error}`)
+  } else if (bundledDsh) {
+    // 旧形态：内置 dsh tgz → npm install --prefix
     cbs.log(`使用内置便携环境：dsh ${bundledDsh.version}（免下载）`)
-    if (!verifySha256(bundledDsh.archivePath, bundledDsh.sha256)) {
+    if (!verifySha256(bundledDsh.archivePath!, bundledDsh.sha256)) {
       throw new InstallError('内置 dsh 校验失败（sha256 不匹配），请重新打包或改用网络安装')
     }
-    pkg = bundledDsh.archivePath
+    fs.mkdirSync(dshDir, { recursive: true })
+    const { command, args } = npmCliArgs(nodeDir, ['install', bundledDsh.archivePath!, '--prefix', dshDir, '--no-audit', '--no-fund'])
+    const result = await runCommand({
+      command,
+      args,
+      cwd: dshDir,
+      env: buildInstallEnv(workspaceDir),
+      timeoutMs: INSTALL_TIMEOUT_MS,
+      signal,
+      onStdout: (chunk) => cbs.log(chunk.trim())
+    })
+    if (result.aborted) throw new InstallCancelledError()
+    if (result.error) throw new InstallError(`dsh ${action}失败：${result.error}`)
   } else {
-    pkg = '@deepseek-ai/dsh' + (mode === 'update' ? '@latest' : '')
+    const pkg = '@deepseek-ai/dsh' + (mode === 'update' ? '@latest' : '')
     cbs.log(`开始${action} DeepSeek Harness（npm install ${pkg}）…`)
+    fs.mkdirSync(dshDir, { recursive: true })
+    const { command, args } = npmCliArgs(nodeDir, ['install', pkg, '--prefix', dshDir, '--no-audit', '--no-fund'])
+    const result = await runCommand({
+      command,
+      args,
+      cwd: dshDir,
+      env: buildInstallEnv(workspaceDir),
+      timeoutMs: INSTALL_TIMEOUT_MS,
+      signal,
+      onStdout: (chunk) => cbs.log(chunk.trim())
+    })
+    if (result.aborted) throw new InstallCancelledError()
+    if (result.error) throw new InstallError(`dsh ${action}失败：${result.error}`)
   }
-
-  fs.mkdirSync(dshDir, { recursive: true })
-  const { command, args } = npmCliArgs(nodeDir, ['install', pkg, '--prefix', dshDir, '--no-audit', '--no-fund'])
-  const result = await runCommand({
-    command,
-    args,
-    cwd: dshDir,
-    env: buildInstallEnv(workspaceDir),
-    timeoutMs: INSTALL_TIMEOUT_MS,
-    signal,
-    onStdout: (chunk) => cbs.log(chunk.trim())
-  })
-  if (result.aborted) throw new InstallCancelledError()
-  if (result.error) throw new InstallError(`dsh ${action}失败：${result.error}`)
 
   let version: string | null = null
   try {

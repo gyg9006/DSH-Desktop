@@ -56,7 +56,7 @@ export function ensureTray(getWindow: () => BrowserWindow | null): void {
   try {
     const icon = nativeImage.createFromPath(trayIconPath()).resize({ width: 16, height: 16 })
     tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)
-    tray.setToolTip('DSH 桌面')
+    tray.setToolTip('DSH-Desktop')
     tray.setContextMenu(buildMenu(getWindow))
     tray.on('click', () => {
       const win = getWindow()

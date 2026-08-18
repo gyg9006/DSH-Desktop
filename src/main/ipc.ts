@@ -145,7 +145,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.AppGetInfo, () => {
     const config = readAppConfig()
     return {
-      appName: 'DSH 桌面',
+      appName: 'DSH-Desktop',
       appVersion: app.getVersion(),
       electron: process.versions.electron,
       chrome: process.versions.chrome,

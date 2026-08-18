@@ -182,13 +182,18 @@ export type EnvItemKey = 'node' | 'npm' | 'pnpm' | 'git' | 'dsh'
 
 export type EnvItemState = 'ok' | 'missing' | 'incompatible' | 'error'
 
+/** 环境来源：内置便携（随包分发）/ 工作区便携 / 系统 / 无 */
+export type EnvItemSource = 'bundled' | 'portable' | 'system' | 'none'
+
 export interface EnvItem {
   key: EnvItemKey
   name: string
   state: EnvItemState
   version: string | null
-  /** 检测到的来源：便携版 / 系统 / 无 */
-  source: 'portable' | 'system' | 'none'
+  /** 检测到的来源：内置便携版 / 工作区便携版 / 系统 / 无 */
+  source: EnvItemSource
+  /** 该项是否有客户端内置便携环境可用（按钮显示「启用内置环境」；npm 视内置 Node 而定） */
+  bundledAvailable?: boolean
   message?: string
 }
 

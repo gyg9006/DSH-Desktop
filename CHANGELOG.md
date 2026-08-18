@@ -4,6 +4,19 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.2] - 2026-08-18
+
+### 修复（打包缺陷紧急修复）
+
+- **便携环境真正内置**：`prepare:env` 由「原始归档」改为「解压目录」形态（`resources/portable-env/node|git|pnpm|dsh-cli/`），随包分发、免下载可直接执行；新增 `env-resolver` 三级优先级（内置 → 工作区 → 系统），环境检测显示 [内置]/[工作区]/[系统] 来源标签；缺失项一键安装自动启用内置环境（[启用内置环境] 按钮），npm/pnpm/dsh 安装前自动确保便携 Node，不再误报「未找到便携 node」；dsh 服务启动同样按三级解析 Node；
+- **EXE 文件名乱码**：`productName`/`win.executableName` 由中文改为纯 ASCII `DSH-Desktop`（实测原 "DSH 桌面.exe" 在发布包中损坏为 "DSH ??.exe"）；窗口标题/托盘提示/错误框/HTML title 同步 ASCII 化；新增 `artifactName: DSH-Desktop-Setup-{version}.{ext}`；
+- **构建后自动校验**：新增 `scripts/verify-build.mjs`——exe 文件名正则 + `resources/portable-env` 完整性（node/git/pnpm/dsh 可执行校验）+ env-manifest 平台匹配，任一失败构建即失败；`pack:dir` 与 Actions 发布流水线均接入，校验日志留档 `verify-build.log`；
+- **pnpm 下载多源**：GitHub 直连（多 IP 轮换）失败自动切换加速镜像（gh.ddlc.top / gh-proxy.com）。
+
+### 质量
+
+- 新增 `env-resolver` 单测 8 项（三级优先级/平台匹配/内置可用性）；installer/installNode 端到端用真实内置包验证（免下载复制安装）；全量回归 244 通过（3 项 smartSync 集成用例依赖 CI 系统 Git 环境，见 Actions 全绿）。
+
 ## [2.1.1] - 2026-08-18
 
 ### 修复

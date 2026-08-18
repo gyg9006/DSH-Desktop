@@ -10,6 +10,7 @@ files:
   - out/**/*
   - resources/**/*
   - '!resources/portable-env/**'
+  - '!resources/feature-registry.json'
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
@@ -22,6 +23,9 @@ extraResources:
     to: portable-env
     filter:
       - '**/*'
+  # 版本保护：功能注册表分发到 resources 外（verify-build / updater 冒烟可读）
+  - from: resources/feature-registry.json
+    to: feature-registry.json
 win:
   executableName: DSH-Desktop
   target:

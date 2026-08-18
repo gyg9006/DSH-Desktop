@@ -1,18 +1,19 @@
 /**
  * Mock GitHub Releases API + 静态文件服务器（端到端更新验证用）。
- * 模拟：GET /repos/gyg9006/DSH-Desktop/releases/latest → 返回 v2.1.1 release
- *       （高于本地 v2.1.0，触发更新流程）；zip 与 SHA256SUMS 走真实本地文件，
+ * 模拟：GET /repos/gyg9006/DSH-Desktop/releases/latest → 返回指定版本 release
+ *       （默认 v2.1.6，高于本地版本即触发更新流程）；zip 与 SHA256SUMS 走真实本地文件，
  *       支持 HEAD + Range（FastDownloader 多线程/续传/测速所需）。
- * 用法：node scripts/mock-update-server.mjs <zipPath> <sha256Path> [port=18080]
+ * 用法：node scripts/mock-update-server.mjs <zipPath> <sha256Path> [port=18080] [version=v2.1.6]
  */
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const [zipPath, sha256Path, portArg] = process.argv.slice(2)
+const [zipPath, sha256Path, portArg, verArg] = process.argv.slice(2)
 const PORT = Number(portArg ?? 18080)
+const VERSION = verArg ?? 'v2.1.6'
 if (!zipPath || !sha256Path) {
-  console.error('usage: node scripts/mock-update-server.mjs <zipPath> <sha256Path> [port]')
+  console.error('usage: node scripts/mock-update-server.mjs <zipPath> <sha256Path> [port] [version]')
   process.exit(1)
 }
 const zipSize = fs.statSync(zipPath).size
@@ -26,8 +27,8 @@ const server = http.createServer((req, res) => {
   // ---- GitHub API：releases/latest ----
   if (url === '/repos/gyg9006/DSH-Desktop/releases/latest') {
     const payload = {
-      tag_name: 'v2.1.1',
-      name: 'DSH 桌面 v2.1.1',
+      tag_name: VERSION,
+      name: `DSH 桌面 ${VERSION}`,
       body: 'mock release for e2e update test',
       html_url: `${base}/release`,
       assets: [

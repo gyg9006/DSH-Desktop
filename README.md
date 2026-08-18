@@ -1,27 +1,27 @@
 <div align="center">
 
-# 🚀 DSH 桌面 v2.1
+# 🚀 DSH 桌面 v2.1.5
 
 **把 DeepSeek Harness 装进一个文件夹 —— 双击即用 · 拷贝即迁移 · 零安装、零残留**
 
 > DeepSeek Harness（`@deepseek-ai/dsh`）的便携式 Windows 桌面客户端
 > React + 赛博朋克 UI · 全中文界面 · 无需一行命令 · 支持客户端全局换肤
 
-[![版本](https://img.shields.io/badge/版本-v2.1.1-1E2A78)](https://github.com/gyg9006/DSH-Desktop/releases)
+[![版本](https://img.shields.io/badge/版本-v2.1.5-1E2A78)](https://github.com/gyg9006/DSH-Desktop/releases)
 [![平台](https://img.shields.io/badge/平台-Windows%2010%2F11-lightgrey)]()
 [![React](https://img.shields.io/badge/React-19-61DAFB)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6)]()
 [![Electron](https://img.shields.io/badge/Electron-43.4-47848F)]()
-[![测试](https://img.shields.io/badge/Tests-240%20passed-brightgreen)]()
+[![测试](https://img.shields.io/badge/Tests-255%20passed-brightgreen)]()
 [![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
 
 ## 📥 立即下载
 
-**👉 [GitHub Releases 下载 v2.1.1（绿色便携版）](https://github.com/gyg9006/DSH-Desktop/releases)**
+**👉 [GitHub Releases 下载 v2.1.5（绿色便携版）](https://github.com/gyg9006/DSH-Desktop/releases)**
 
-- 下载 `DSH-Desktop-v2.1.1-win.zip`，解压后双击「启动 DSH 桌面.bat」即可使用；
-- 内置便携 Node / npm / pnpm / Git / dsh 运行环境，**电脑上什么都不用装**，之后只需一键更新；
-- 支持应用内**自动更新**（每 6 小时检测 GitHub Releases 新版本，右下角通知 + 多线程下载 + SHA256 校验）。
+- 下载 `DSH-Desktop-v2.1.5-win.zip`，解压后双击「启动 DSH 桌面.bat」即可使用；
+- 内置便携 Node / npm / pnpm / Git / dsh 运行环境（**解压目录形态**，随包自带 VC++ 运行库，Win10 LTSC 精简系统也能直接跑），**电脑上什么都不用装**，之后只需一键更新；
+- 支持应用内**自动更新**（每 6 小时检测 GitHub Releases 新版本，右下角通知 + 多线程下载 + SHA256 校验 + **更新包冒烟测试与失败回滚**）。
 
 </div>
 
@@ -35,6 +35,19 @@
 4. **版本更新提示与下载加速**：右下角非阻断通知（[立即更新][稍后提醒][查看日志]）+ 进度窗口；下载升级为 **4 线程分片 + 断点续传 + 镜像测速 + SHA256 校验**（发布侧随包上传 SHA256SUMS）；
 5. **工作文件夹设置与数据迁移**：设置 → 通用 → 工作文件夹（当前路径 + 更改位置并迁移）；原子迁移（流式复制 → 完整性校验 → 切换 → 旧目录备份 → 失败回滚）；
 6. **会话背景自定义**：设置 → 外观 → 会话背景（跟随主题 / 纯色 / 8 组渐变 / 上传图片自动压缩 ≤2K）+ 填充/透明度/模糊调整，仅作用于对话区域。
+
+---
+
+## 🛡️ v2.1.2 ~ v2.1.5 加固与修复
+
+1. **便携环境真正内置（三级解析）**：内置环境为**解压目录形态**（`resources/portable-env/node|git|pnpm|dsh-cli/`）随包分发；新增 `env-resolver` 三级优先级（**内置 → 工作区 → 系统**），环境检测显示 [内置]/[工作区]/[系统] 来源标签；缺失项一键安装自动启用内置环境（[启用内置环境] 按钮），npm/pnpm/dsh 安装前自动确保便携 Node；
+2. **EXE 命名 ASCII 化**：`productName`/`executableName` 改为 `DSH-Desktop`（修复中文名导致 exe 文件名乱码）；构建后自动校验（`verify-build.mjs`：exe 名正则 + 内置环境完整性 + VC 运行库 + feature-registry）；
+3. **首次引导可跳过**：三步引导每步底部「跳过引导」，确认后直接进入主界面（环境与 Key 可稍后配置）；
+4. **Win10 LTSC 精简系统兼容**：内置 VC++ 运行库 DLL（vcruntime140 等）随包分发，node.exe 免系统安装即可运行；
+5. **API Key 保存即同步**：保存 Key 自动启用厂商 + 补齐默认模型 → 实时同步 dsh 模型选择器与凭据，不再反复弹「输入 API Key」；
+6. **设置 → 高级 → 日志卡片**：查看应用/dsh 服务日志、一键导出 zip、清空，排查问题直接附上；
+7. **服务端口配置 hover 提示**：自动探测 / 固定端口悬停说明；
+8. **版本更新保护机制**：`feature-registry.json` 功能注册表 + 更新包安装前冒烟测试（失败中止更新）+ 替换后二次校验失败自动回滚 + `logs/update-report.md` 更新留档。
 
 ---
 
@@ -100,7 +113,7 @@
 | **模型与 API** | 14 预设厂商 + 自定义、Key 加密存储、连接测试、模型列表、三类默认模型、同步 dsh 对话选择器 |
 | **外观** | 客户端全局主题插件（Design Token + CSS）、明暗偏好、**会话背景**（预设/纯色/渐变/上传图片 + 填充/透明度/模糊） |
 | **设置** | 通用（语言 / Agent 预设 / **工作文件夹迁移**）/模型与 API/外观/快捷键/关于/高级配置/全局行为 |
-| **高级配置** | 环境检测（**一键安装** + 一键更新）、服务端口（被占自动顺延）、开机自启、自动备份、**智能同步**（预览/冲突三选一/自动同步） |
+| **高级配置** | 环境检测（**一键安装/启用内置环境** + 一键更新）、服务端口（自动探测/固定 + hover 提示）、开机自启、自动备份、**智能同步**（预览/冲突三选一/自动同步）、**日志**（查看/导出/清空） |
 | **全局行为** | 永久指令（问题解决优先级协议）落盘 global-rules.md，可视化编辑 |
 | **更新** | 自动（每 6 小时）检查 GitHub Releases，右下角通知（立即更新/稍后提醒/查看日志）+ 多线程下载 + 断点续传 + 镜像测速 + SHA256 校验 |
 
@@ -114,14 +127,14 @@
 
 ```
 DSH-Desktop/
-├── app/                  ← 程序本体（app\DSH 桌面.exe）
+├── app/                  ← 程序本体（app\DSH-Desktop.exe）
 ├── workspace/            ← 工作文件夹（运行环境 + 全部数据，随文件夹拷走）
 │   ├── runtime/          ← 便携 Node / npm / pnpm / Git / dsh
 │   ├── data/             ← 对话记录、设置、凭据、profiles
 │   ├── skills/           ← 技能
 │   ├── themes/           ← 主题插件
 │   ├── backups/          ← 备份
-│   └── logs/             ← 日志
+│   └── logs/             ← 日志（含 update-report.md 更新留档）
 └── 启动 DSH 桌面.bat     ← 双击启动
 ```
 
@@ -138,9 +151,9 @@ DSH-Desktop/
 # 环境要求：Node.js ≥ 18（实测 v24 正常）
 npm install
 npm run dev          # 开发模式（热更新）
-npm test             # 单元测试（240 项）
-npm run prepare:env  # 下载打包内置便携环境（Node/Git/pnpm/dsh 归档 + env-manifest.json）
-npm run pack:dir     # 打包为绿色目录（输出到 ../DSH-Desktop/app）
+npm test             # 单元测试（255 项）
+npm run prepare:env  # 下载并解压打包内置便携环境（Node/Git/pnpm/dsh 目录 + env-manifest.json）
+npm run pack:dir     # 打包为绿色目录（构建 + verify-build 校验，输出到 ../DSH-Desktop/app）
 node scripts/release.mjs   # 生成更新包 zip + SHA256SUMS
 ```
 
@@ -156,7 +169,7 @@ node scripts/release.mjs   # 生成更新包 zip + SHA256SUMS
 | 前端 | **React 19** + TypeScript 5.9 + Tailwind CSS（Design Token 主题变量）+ shadcn 风格组件（Radix primitives） |
 | 状态/数据 | hooks + IPC 白名单桥（contextBridge，全类型定义） |
 | 安全 | API Key 经 Electron safeStorage 加密落盘；渲染层永不接触明文 |
-| 测试 | Vitest（205 项，主进程纯逻辑 + 共享层） |
+| 测试 | Vitest（255 项，主进程纯逻辑 + 共享层 + 真实内置环境 e2e） |
 | 运行时 | 便携 Node / npm / pnpm / Git / dsh（`@deepseek-ai/dsh`） |
 
 ```
@@ -188,8 +201,14 @@ src/
 **端口被占用？**
 dsh 默认 3080，应用自动探测并在占用时**自动顺延**；也可在「设置 → 高级配置 → 服务与运行」固定端口。
 
+**Win10 LTSC / 精简系统无法启动服务？**
+v2.1.5 起内置 Node 已随包携带 VC++ 运行库 DLL（vcruntime140 等），无需系统安装；若仍异常，到「设置 → 高级配置 → 日志」导出日志排查，或查看 `工作文件夹\logs\dsh.log`。
+
 **模型选择器里没有模型？**
-到「设置 → 模型与 API」启用厂商、勾选模型（模型为空会自动用该厂商预设默认补齐），填 Key 保存后 dsh 对话内即可选择。
+到「设置 → 模型与 API」启用厂商、勾选模型（模型为空会自动用该厂商预设默认补齐），**保存 Key 即自动启用厂商并同步 dsh**（无需手动启用）。
+
+**更新失败会损坏当前版本吗？**
+不会。更新包安装前会执行冒烟测试（exe/内置环境/asar 完整性），失败自动中止；替换后二次校验，失败自动回滚到旧版本，`logs/update-report.md` 留档。
 
 **如何安装主题插件？**
 将主题插件目录（含 `theme-plugin.json` / `tokens.json` / `theme.css`）放入工作文件夹 `themes/` 下，重启后在「设置 → 外观」选择。
@@ -206,6 +225,7 @@ dsh 默认 3080，应用自动探测并在占用时**自动顺延**；也可在�
 | v0.1~0.3 | 12 节规格落地：环境检测、会话管理、插件/技能市场、备份同步、自动更新（Vue 版） |
 | **v2.0** | **React 19 + 赛博朋克 UI 全面重构**：6 大模块、全域模型中心、一键智能提炼流水线、主题插件全局化、全局行为规则、会话卡片视图、Agent 管理、知识库、Skill 管理 |
 | **v2.1** | **体验优化专项（6 项）**：首启三步引导 + 白屏修复、Git 时间戳智能同步、环境一键安装 + 内置便携环境、更新通知 + 多线程下载加速（SHA256 校验）、工作文件夹原子迁移、会话背景自定义 |
+| **v2.1.2~v2.1.5** | **加固与修复**：便携环境解压目录形态 + 三级解析（内置/工作区/系统）、EXE 命名 ASCII 化 + 构建校验、引导可跳过、VC++ 运行库内置（LTSC 兼容）、API Key 保存即同步、日志卡片、端口 Tooltip、版本更新保护机制（feature-registry + 冒烟 + 回滚） |
 
 ---
 

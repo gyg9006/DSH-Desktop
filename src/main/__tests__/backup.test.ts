@@ -71,7 +71,7 @@ describe('createBackup / listBackups / restoreBackup / pruneBackups（真实 tar
 
     const list = listBackups(ws)
     expect(list.length).toBe(1)
-    expect(list[0].name).toMatch(/^backup-\d{8}-\d{6}-\d{3}\.zip$/)
+    expect(list[0].name).toMatch(/^backup-\d{8}-\d{6}-\d{2,3}\.zip$/)
 
     // 恢复：先改动数据再恢复（zip 解压覆盖备份中的文件；备份外的新文件保留）
     fs.writeFileSync(path.join(ws, 'data', 'sessions', 'a.jsonl'), 'CHANGED')

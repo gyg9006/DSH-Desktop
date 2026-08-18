@@ -70,14 +70,14 @@ describe('FastDownloader（多线程分片 / 续传 / 镜像测速）', () => {
 
   it('取消后保留分片，续传成功且内容一致', async () => {
     const src = crypto.randomBytes(16 * 1024 * 1024)
-    const { url, close } = await serve(src, 300) // 慢源：确保 80ms 时仍在下载
+    const { url, close } = await serve(src, 2000) // 极慢源：确保取消时仍在下载
     const dir = makeTempDir()
     const dest = path.join(dir, 'out.bin')
     try {
       const controller = new AbortController()
       const firstPromise = fastDownload({ url, dest, threads: 4, signal: controller.signal })
-      // 探测 300ms 后进行中段取消（分片已建立但未完成）
-      setTimeout(() => controller.abort(), 650)
+      // 下载未完成时中段取消（分片已建立但未完成）
+      setTimeout(() => controller.abort(), 100)
       const first = await firstPromise
       expect(first.canceled).toBe(true)
       expect(fs.existsSync(dest + '.parts')).toBe(true)

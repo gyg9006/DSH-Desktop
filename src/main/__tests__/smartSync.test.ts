@@ -18,10 +18,17 @@ afterEach(() => {
 
 /** vitest worker 内 PATH 解析不可靠（沙箱环境），显式定位 git.exe。 */
 const GIT_BIN: string = (() => {
+  // 支持环境变量注入（CI / 便携环境）；否则回退候选路径
+  if (process.env.GIT_BIN && fs.existsSync(process.env.GIT_BIN)) return process.env.GIT_BIN
   const candidates = [
     'C:\\Program Files\\Git\\cmd\\git.exe',
     'C:\\Program Files\\Git\\bin\\git.exe',
-    'C:\\Program Files (x86)\\Git\\cmd\\git.exe'
+    'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
+    // 便携 Git（DSH 桌面运行时：工作文件夹 / 源码仓库上级）
+    path.resolve(__dirname, '../../../workspace/runtime/git/cmd/git.exe'),
+    path.resolve(__dirname, '../../../../workspace/runtime/git/cmd/git.exe'),
+    path.resolve(__dirname, '../../../workspace/runtime/git/bin/git.exe'),
+    path.resolve(__dirname, '../../../../workspace/runtime/git/bin/git.exe')
   ]
   for (const c of candidates) if (fs.existsSync(c)) return c
   for (const d of (process.env.PATH ?? '').split(';')) {

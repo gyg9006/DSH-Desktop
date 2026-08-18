@@ -14,11 +14,13 @@ $ErrorActionPreference = 'Stop'
 $Repo   = 'E:\deepseek_harness\DSH-Desktop-2.0.0'
 $Remote = 'https://github.com/gyg9006/DSH-Desktop.git'
 $Branch = 'main'
-$Tag    = 'v2.1.0'
+# Tag derived from package.json version (regex, avoids non-ASCII parse issues)
+$pkgRaw = Get-Content (Join-Path $Repo 'package.json') -Raw
+$Tag    = 'v' + [regex]::Match($pkgRaw, '"version"\s*:\s*"([^"]+)"').Groups[1].Value
 $MaxAttempts = 8
 $WaitSec     = 20
 
-Write-Host '=== DSH-Desktop push to GitHub ===' -ForegroundColor Cyan
+Write-Host "=== DSH-Desktop push to GitHub (tag $Tag) ===" -ForegroundColor Cyan
 
 if (-not (Test-Path (Join-Path $Repo '.git'))) {
   git -C $Repo init -b $Branch | Out-Null

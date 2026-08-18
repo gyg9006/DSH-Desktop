@@ -326,7 +326,8 @@ const api = {
   exportLogs: (): Promise<{ ok: boolean; canceled?: boolean; error?: string }> => ipcRenderer.invoke(IPC.LogsExport),
 
   // ---------- M5：关于 ----------
-  checkUpdate: (): Promise<UpdateCheckResultPayload> => ipcRenderer.invoke(IPC.AppCheckUpdate),
+  /** 检查更新；force=true 绕过 10 分钟冷却（手动检查/立即更新用，返回含 assetId 的完整结果）。 */
+  checkUpdate: (force?: boolean): Promise<UpdateCheckResultPayload> => ipcRenderer.invoke(IPC.AppCheckUpdate, force === true),
   getUpdateSettings: (): Promise<UpdateSettingsPayload> => ipcRenderer.invoke(IPC.AppUpdateSettingsGet),
   setUpdateSettings: (patch: Partial<UpdateSettingsPayload>): Promise<{ ok: boolean; settings?: UpdateSettingsPayload }> =>
     ipcRenderer.invoke(IPC.AppUpdateSettingsSet, patch),

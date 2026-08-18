@@ -52,7 +52,8 @@ export function UpdateCenter(): JSX.Element | null {
   const beginDownload = useCallback(async (): Promise<void> => {
     setBusy(true)
     try {
-      const check: UpdateCheckResultPayload = await window.dshw.checkUpdate()
+      // force=true：绕过冷却，拿到含 assetId/直链的完整结果（冷却缓存不含下载参数）
+      const check: UpdateCheckResultPayload = await window.dshw.checkUpdate(true)
       if (!check.ok || !check.hasUpdate || check.assetId === undefined) {
         toast(check.message ?? '当前已是最新版本', 'info')
         setNotice(null)

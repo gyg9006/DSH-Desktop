@@ -4,6 +4,18 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.1] - 2026-08-18
+
+### 修复
+
+- **更新流程：10 分钟冷却期内点击「立即更新」失败**（冷却缓存结果不含 assetId/直链，误报"已是最新版本"且不下载）→ 手动检查与「立即更新」改为 `force` 检查（绕过冷却，始终拿到完整下载参数）；
+- **关于页文案双 v**："发现新版本 vv2.1.1" → "发现新版本 v2.1.1"（`latest` 已含 v 前缀）。
+
+### 质量
+
+- 端到端更新验证（本地 mock 更新源 + 真实 228MB 更新包）：检查 → 通知 → 立即更新 → 4 线程下载 → SHA256 校验（与发布 SHA256SUMS 逐字节一致）→ "更新包已下载"，全程渲染层零异常；
+- 新增测试工具脚本：`scripts/mock-update-server.mjs`（模拟 GitHub Releases + Range 文件服务）、`scripts/cdp-update-e2e-check.mjs`（CDP 端到端更新验证）。
+
 ## [2.1.0] - 2026-08-18
 
 ### 新增（体验优化专项，6 项）

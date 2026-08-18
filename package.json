@@ -1,6 +1,6 @@
 {
   "name": "dsh-desktop",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "DSH Desktop v2.0 —— DeepSeek Harness 便携式 Windows 桌面客户端（React + 赛博朋克 UI）",
   "main": "./out/main/index.js",
   "author": {

@@ -30,10 +30,11 @@ export function AboutSection(): JSX.Element {
   const check = async (): Promise<void> => {
     setChecking(true)
     try {
-      const result = await window.dshw.checkUpdate()
+      // force=true：手动检查应始终查询更新源（绕过 10 分钟冷却）
+      const result = await window.dshw.checkUpdate(true)
       setCheckResult(result)
       toast(
-        result.hasUpdate ? `发现新版本 v${result.latest}，可在右下角通知中选择更新` : (result.message ?? '已是最新版本'),
+        result.hasUpdate ? `发现新版本 ${result.latest}，可在右下角通知中选择更新` : (result.message ?? '已是最新版本'),
         result.hasUpdate ? 'info' : 'success'
       )
     } finally {
@@ -91,7 +92,7 @@ export function AboutSection(): JSX.Element {
           {checkResult && (
             <div className="text-xs text-cyber-dim">
               {checkResult.hasUpdate
-                ? `发现新版本 v${checkResult.latest}${checkResult.size ? `（${(checkResult.size / 1024 / 1024).toFixed(1)} MB）` : ''}`
+                ? `发现新版本 ${checkResult.latest}${checkResult.size ? `（${(checkResult.size / 1024 / 1024).toFixed(1)} MB）` : ''}`
                 : checkResult.message}
             </div>
           )}

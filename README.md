@@ -7,7 +7,7 @@
 > DeepSeek Harness（`@deepseek-ai/dsh`）的便携式 Windows 桌面客户端
 > React + 赛博朋克 UI · 全中文界面 · 无需一行命令 · 支持客户端全局换肤
 
-[![版本](https://img.shields.io/badge/版本-v2.1.0-1E2A78)](https://github.com/gyg9006/DSH-Desktop/releases)
+[![版本](https://img.shields.io/badge/版本-v2.1.1-1E2A78)](https://github.com/gyg9006/DSH-Desktop/releases)
 [![平台](https://img.shields.io/badge/平台-Windows%2010%2F11-lightgrey)]()
 [![React](https://img.shields.io/badge/React-19-61DAFB)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6)]()
@@ -17,9 +17,9 @@
 
 ## 📥 立即下载
 
-**👉 [GitHub Releases 下载 v2.1.0（绿色便携版）](https://github.com/gyg9006/DSH-Desktop/releases)**
+**👉 [GitHub Releases 下载 v2.1.1（绿色便携版）](https://github.com/gyg9006/DSH-Desktop/releases)**
 
-- 下载 `DSH-Desktop-v2.1.0-win.zip`，解压后双击「启动 DSH 桌面.bat」即可使用；
+- 下载 `DSH-Desktop-v2.1.1-win.zip`，解压后双击「启动 DSH 桌面.bat」即可使用；
 - 内置便携 Node / npm / pnpm / Git / dsh 运行环境，**电脑上什么都不用装**，之后只需一键更新；
 - 支持应用内**自动更新**（每 6 小时检测 GitHub Releases 新版本，右下角通知 + 多线程下载 + SHA256 校验）。
 

@@ -96,7 +96,7 @@ import { readAppLog, readDshLog, clearLogs, exportLogsZip } from './logs'
 import { getKnowledge, createKnowledgeCategory, renameKnowledgeCategory, deleteKnowledgeCategory, createKnowledgeEntry, updateKnowledgeEntry, deleteKnowledgeEntry, searchKnowledge, extractKnowledgeToStore, iterateKnowledge } from './knowledge'
 import { runExtractionPipeline, readRecentSessionText } from './skillOrchestrator'
 import { ensureGlobalRules, getRulesFilePath, saveGlobalRules } from './rules'
-import { getAllProviders, updateProviderConfig, updateCustomProvider, deleteCustomProvider, migrateLegacyApiConfig } from './provider-registry'
+import { getAllProviders, updateProviderConfig, updateCustomProvider, deleteCustomProvider, migrateLegacyApiConfig, readModelsConfig, writeModelsConfig, PROVIDER_PRESETS } from './provider-registry'
 import { saveApiKeySecure, readApiKeySecure, deleteApiKeySecure, maskKey } from './secure-storage'
 import { testAdapterConnection, listModelsFor } from './adapters'
 import { syncModelsConfigToDsh, syncKeysToCredentials } from './modelsDshSync'
@@ -949,6 +949,21 @@ export function registerIpcHandlers(): void {
     const id = String(providerId ?? '')
     if (!id) return { ok: false, error: '缺少厂商 id' }
     saveApiKeySecure(getWorkspaceDir(), id, String(key ?? ''))
+    // 保存 Key 时自动启用该厂商并补齐默认模型（models.json）：
+    // 否则 llm-deepseek/llm-pi-ai 段不写 → dsh 模型选择器为空 + 凭据不同步 → dsh 反复提示输入 API Key
+    try {
+      const cfg = readModelsConfig(getWorkspaceDir())
+      const preset = PROVIDER_PRESETS.find((p) => p.id === id)
+      const cur = cfg.providers[id] ?? { enabled: false, models: [] }
+      cfg.providers[id] = {
+        ...cur,
+        enabled: true,
+        models: Array.isArray(cur.models) && cur.models.length > 0 ? cur.models : (preset?.defaultModels ?? [])
+      }
+      writeModelsConfig(getWorkspaceDir(), cfg)
+    } catch (error) {
+      return { ok: false, error: `厂商配置保存失败：${String(error)}` }
+    }
     syncModelsConfigToDsh(getWorkspaceDir())
     syncKeysToCredentials(getWorkspaceDir())
     const plain = readApiKeySecure(getWorkspaceDir(), id)

@@ -4,6 +4,13 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.5] - 2026-08-18
+
+### 修复
+
+- **设置里输入 API Key 后无法同步到 dsh**（模型选择器消失 / dsh 反复提示输入 API Key）：根因是保存 Key 只写加密存储（secure-keys.json），不创建 models.json → `llm-deepseek`/`llm-pi-ai` 段不写 → dsh 模型选择器无数据、凭据不同步。**保存 Key 时自动启用该厂商并补齐默认模型**，一次保存即同步 models.json → settings.yaml → credentials.yaml，dsh 对话页模型选择器立即可选、不再提示配置 Key；
+- 配套端到端验证：输入 Key → models.json（enabled+models）/ settings.yaml（llm-deepseek）/ credentials.yaml（DEEPSEEK_API_KEY）三处同步落盘，服务启动后 dsh web 就绪。
+
 ## [2.1.4] - 2026-08-18
 
 ### 修复

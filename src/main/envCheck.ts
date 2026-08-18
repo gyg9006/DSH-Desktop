@@ -46,7 +46,9 @@ async function detectNode(workspaceDir: string): Promise<EnvItem> {
   const ba = bundledToolPath('node') !== null
   if (tool.source === 'bundled' || tool.source === 'portable') {
     const version = await runVersion(tool.binPath!, ['--version'])
-    if (version === null) return makeItem('node', 'Node.js', 'error', null, tool.source, `执行失败：${tool.binPath}`, ba)
+    if (version === null) {
+      return makeItem('node', 'Node.js', 'error', null, tool.source, `执行失败：${tool.binPath}（可能缺少 VC++ 运行库或文件损坏）`, ba)
+    }
     return makeItem(
       'node',
       'Node.js',

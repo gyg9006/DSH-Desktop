@@ -4,6 +4,16 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.3] - 2026-08-18
+
+### 新增
+
+- **首次引导可跳过**：三步引导（工作文件夹/环境检测/API Key）每步底部新增「跳过引导」按钮（确认后直接进入主界面，环境与 Key 可稍后在「设置」中配置，不自动启动 dsh 服务）。
+
+### 修复
+
+- **Win10 LTSC 21H2 等精简系统无法运行服务**：根因为系统缺少 VC++ 运行库（vcruntime140.dll / vcruntime140_1.dll / msvcp140.dll），内置 node.exe 启动失败导致 dsh 服务起不来。`prepare:env` 现随包分发 3 个 VC 运行库 DLL 到 `portable-env/node/`（与 node.exe 同目录自包含，免系统安装）；`verify-build` 增加 DLL 存在性校验；环境检测在 node 执行失败时提示「可能缺少 VC++ 运行库」。
+
 ## [2.1.2] - 2026-08-18
 
 ### 修复（打包缺陷紧急修复）

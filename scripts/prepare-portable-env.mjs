@@ -225,6 +225,25 @@ if (!skip.has('node')) {
   console.log(`  校验通过：${verOut}`)
   manifest.node = { version: ver, dir: 'node', exe: np.exe, archive: zipName, ...(fs.existsSync(archive) ? { sha256: sha256Of(archive) } : {}) }
   if (!force) fs.rmSync(archive, { force: true })
+
+  // ---- VC++ 运行库 DLL（Win10 LTSC/精简版缺 vcruntime140 等 → node.exe 无法启动） ----
+  if (platform === 'win32' && !skip.has('vcredist')) {
+    step('VC++ 运行库 DLL（随内置 Node 分发，免系统安装）')
+    const sysDir = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32')
+    const dlls = ['vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll']
+    let copied = 0
+    for (const dll of dlls) {
+      const src = path.join(sysDir, dll)
+      if (fs.existsSync(src)) {
+        fs.copyFileSync(src, path.join(nodeDir, dll))
+        console.log(`  ✓ ${dll} → node/（与 node.exe 同目录，Windows 优先加载）`)
+        copied += 1
+      } else {
+        console.log(`  ⚠ ${dll} 本机缺失（跳过；目标系统需安装 VC++ 2015-2022 运行库）`)
+      }
+    }
+    if (copied === 0) console.log('  警告：未复制任何 VC 运行库 DLL')
+  }
 }
 
 // ---- Git（仅 Windows 内置 MinGit；mac/linux 走系统依赖） ----

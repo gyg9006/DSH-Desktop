@@ -12,7 +12,8 @@ import {
   ArrowLeft,
   RefreshCw,
   Server,
-  PlugZap
+  PlugZap,
+  SkipForward
 } from 'lucide-react'
 import type {
   EnvItemKey,
@@ -215,6 +216,31 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps): JSX.Ele
     }
   }, [toast, onComplete])
 
+  /** 跳过引导：标记 onboarded 直接进入主界面（不自动启动 dsh 服务，可稍后手动启动）。 */
+  const skipOnboarding = useCallback(async (): Promise<void> => {
+    if (completing) return
+    if (
+      !window.confirm(
+        '跳过首次引导？\n\n之后可随时在「设置 → 环境检测」中一键安装/启用内置环境，在「设置 → 模型」中配置 API Key。工作文件夹保持默认。'
+      )
+    ) {
+      return
+    }
+    setCompleting(true)
+    try {
+      const saved = await window.dshw.updateConfig({ onboarded: true })
+      if (!saved.ok) {
+        toast(saved.error ?? '跳过引导保存失败', 'error')
+        setCompleting(false)
+        return
+      }
+      onComplete()
+    } catch (error) {
+      toast(`跳过引导处理失败：${String(error)}`, 'error')
+      setCompleting(false)
+    }
+  }, [toast, onComplete, completing])
+
   const envStateOf = (key: EnvItemKey): { state: string; version: string | null; source: string; bundledAvailable: boolean } => {
     const item = env?.items.find((i) => i.key === key)
     return {
@@ -283,13 +309,18 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps): JSX.Ele
                   会话记录、知识库、技能、插件、配置与凭据全部保存在工作文件夹内。可以整文件夹迁移/同步到其他电脑。
                 </p>
                 <div className="flex items-center justify-between gap-2">
-                  <Button size="sm" variant="outline" onClick={() => void chooseWorkspace()} disabled={relaunching}>
-                    {relaunching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
-                    更改位置…
+                  <Button size="sm" variant="ghost" onClick={() => void skipOnboarding()} disabled={completing}>
+                    <SkipForward className="h-3.5 w-3.5" /> 跳过引导
                   </Button>
-                  <Button size="sm" onClick={() => setStep(2)} disabled={relaunching || workspacePath === '加载中…'}>
-                    使用此路径并继续 <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => void chooseWorkspace()} disabled={relaunching}>
+                      {relaunching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
+                      更改位置…
+                    </Button>
+                    <Button size="sm" onClick={() => setStep(2)} disabled={relaunching || workspacePath === '加载中…'}>
+                      使用此路径并继续 <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
               </>
             )}
@@ -361,6 +392,9 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps): JSX.Ele
                     <ArrowLeft className="h-3.5 w-3.5" /> 上一步
                   </Button>
                   <div className="flex items-center gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => void skipOnboarding()} disabled={completing}>
+                      <SkipForward className="h-3.5 w-3.5" /> 跳过引导
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={reloadEnv} disabled={installBusy !== null}>
                       <RefreshCw className="h-3.5 w-3.5" /> 重新检测
                     </Button>
@@ -442,10 +476,15 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps): JSX.Ele
                   <Button size="sm" variant="ghost" onClick={() => setStep(2)}>
                     <ArrowLeft className="h-3.5 w-3.5" /> 上一步
                   </Button>
-                  <Button size="sm" variant="success" onClick={() => void complete()} disabled={!step3Ready || completing}>
-                    {completing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                    完成，进入工作台
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => void skipOnboarding()} disabled={completing}>
+                      <SkipForward className="h-3.5 w-3.5" /> 跳过引导
+                    </Button>
+                    <Button size="sm" variant="success" onClick={() => void complete()} disabled={!step3Ready || completing}>
+                      {completing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                      完成，进入工作台
+                    </Button>
+                  </div>
                 </div>
               </>
             )}

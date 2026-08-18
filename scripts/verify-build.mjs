@@ -72,6 +72,12 @@ if (!fs.existsSync(envDir)) {
   if (nodeVer) pass('node/node.exe 存在且可执行', nodeVer)
   else fail('node/node.exe 存在且可执行', nodeExe)
 
+  // VC++ 运行库 DLL（Win10 LTSC 精简版缺失会导致 node.exe 无法启动）
+  const vcDlls = ['vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll']
+  const missingDlls = vcDlls.filter((d) => !fs.existsSync(path.join(envDir, 'node', d)))
+  if (missingDlls.length === 0) pass('node/ 随包 VC++ 运行库 DLL（vcruntime140 等）', vcDlls.join(', '))
+  else fail('node/ 随包 VC++ 运行库 DLL（vcruntime140 等）', `缺失：${missingDlls.join(', ')}`)
+
   const gitVer = run(gitExe, ['--version'])
   if (gitVer) pass('git/cmd/git.exe 存在且可执行（完整 MinGit）', gitVer)
   else fail('git/cmd/git.exe 存在且可执行', gitExe)

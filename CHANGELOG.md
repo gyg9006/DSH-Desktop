@@ -4,6 +4,20 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.6] - 2026-08-19
+
+### 修复
+
+- **点击「启动服务」应用异常/服务无法启动**（EPERM：Permission denied）：根因是**中断的 npm install 残留进程**持有 `runtime/dsh` 目录句柄 → 自动修复（清理坏安装重装）删除目录时 EPERM 失败。修复：
+  1. `cleanupRuntimeNode`：启动服务自动修复前，先清理本工作区 runtime 下残留的 node/npm 进程（中断的安装任务）；
+  2. 修复 PowerShell `-like` 匹配（反斜杠为字面，之前 `\\` 转义导致永不匹配——`cleanupStaleDsh` 同修）；
+  3. `safeRemoveDir` 删除失败自动重试（600ms × 3），等待残留进程释放句柄；
+- 实测：残留进程场景 → 自动清理 → 坏安装删除成功 → 重装 275 依赖 → 服务运行（端口 3081），应用全程稳定不退出。
+
+### 说明
+
+- 首次打开不显示引导页：工作文件夹 `config/app.json` 的 `onboarded=true`（此前已完成/跳过引导）即直接进主界面；如需全新引导，更换工作文件夹即可。
+
 ## [2.1.5] - 2026-08-18
 
 ### 修复

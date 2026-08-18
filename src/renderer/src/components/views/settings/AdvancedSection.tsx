@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import {
   Cpu,
@@ -178,6 +178,31 @@ function EnvCard(): JSX.Element {
   )
 }
 
+/** 轻量 Tooltip：悬停 300ms 显示、移出 200ms 消失，样式沿用项目 cyber 主题。 */
+function Tip({ text, children }: { text: string; children: React.ReactNode }): JSX.Element {
+  const [show, setShow] = useState(false)
+  const openTimer = useRef<number | undefined>(undefined)
+  const closeTimer = useRef<number | undefined>(undefined)
+  const enter = (): void => {
+    if (closeTimer.current) window.clearTimeout(closeTimer.current)
+    openTimer.current = window.setTimeout(() => setShow(true), 300)
+  }
+  const leave = (): void => {
+    if (openTimer.current) window.clearTimeout(openTimer.current)
+    closeTimer.current = window.setTimeout(() => setShow(false), 200)
+  }
+  return (
+    <span className="relative inline-flex" onMouseEnter={enter} onMouseLeave={leave}>
+      {children}
+      {show && (
+        <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-cyber-border bg-cyber-panel px-2 py-1 text-[10px] text-cyber-text shadow-lg">
+          {text}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function ServiceCard(): JSX.Element {
   const [portMode, setPortMode] = useState<'auto' | 'fixed'>('auto')
   const [port, setPort] = useState('3080')
@@ -216,12 +241,16 @@ function ServiceCard(): JSX.Element {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="cursor-pointer" onClick={() => { setPortMode('auto'); void savePort() }}>
-            自动探测
-          </Badge>
-          <Badge variant="outline" className="cursor-pointer" onClick={() => { setPortMode('fixed'); void savePort() }}>
-            固定端口
-          </Badge>
+          <Tip text="自动探测：自动寻找可用端口，避免冲突">
+            <Badge variant={portMode === 'auto' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => { setPortMode('auto'); void savePort() }}>
+              自动探测
+            </Badge>
+          </Tip>
+          <Tip text="固定端口：手动指定端口号，适用于已部署固定端口的场景">
+            <Badge variant={portMode === 'fixed' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => { setPortMode('fixed'); void savePort() }}>
+              固定端口
+            </Badge>
+          </Tip>
           {portMode === 'fixed' && (
             <>
               <Input value={port} onChange={(e) => setPort(e.target.value.replace(/\D/g, ''))} className="h-7 w-24 font-mono text-xs" />

@@ -17,12 +17,15 @@ import {
   ScanSearch,
   ArrowUpCircle,
   ArrowDownCircle,
-  GitMerge
+  GitMerge,
+  Terminal,
+  Trash2
 } from 'lucide-react'
 import type {
   BackupSettingsPayload,
   EnvItem,
   InstallKey,
+  LogsPayload,
   SyncConfigPayload,
   SyncFileItem,
   SyncMode,
@@ -37,7 +40,7 @@ import { Badge } from '../../ui/badge'
 import { useToast } from '../../ui/toast'
 import { cn } from '../../../lib/utils'
 
-/** 高级配置：环境检测 / 服务 / 自动备份 / 智能同步（模型与 API 已独立为「模型与 API」子菜单）。 */
+/** 高级配置：环境检测 / 服务 / 自动备份 / 智能同步 / 日志（模型与 API 已独立为「模型与 API」子菜单）。 */
 export function AdvancedSection(): JSX.Element {
   return (
     <div className="max-w-2xl space-y-4">
@@ -45,6 +48,7 @@ export function AdvancedSection(): JSX.Element {
       <ServiceCard />
       <BackupCard />
       <SmartSyncCard />
+      <LogsCard />
     </div>
   )
 }
@@ -648,5 +652,77 @@ function SyncList(props: {
         ))}
       </div>
     </div>
+  )
+}
+
+/** 日志卡片：查看应用/服务日志、导出 zip、清空（排查启动/环境问题时导出并附上）。 */
+function LogsCard(): JSX.Element {
+  const { toast } = useToast()
+  const [logs, setLogs] = useState<LogsPayload | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async (): Promise<void> => {
+    setBusy(true)
+    try {
+      setLogs(await window.dshw.readLogs())
+    } catch {
+      setLogs(null)
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const exportLogs = async (): Promise<void> => {
+    const r = await window.dshw.exportLogs()
+    if (r.ok) toast('日志已导出为 zip', 'info')
+    else if (!r.canceled) toast(r.error ?? '导出失败', 'error')
+  }
+
+  const clear = async (): Promise<void> => {
+    if (!confirm('清空应用与 dsh 服务日志？')) return
+    const r = await window.dshw.clearLogs()
+    if (r.ok) {
+      toast('日志已清空', 'info')
+      void load()
+    } else {
+      toast(r.error ?? '清空失败', 'error')
+    }
+  }
+
+  const lines: string[] = []
+  if (logs) {
+    for (const l of logs.dsh ?? []) lines.push(`[dsh] ${l}`)
+    for (const l of logs.app ?? []) lines.push(`[app] ${l}`)
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Terminal className="h-4 w-4 text-cyber-neon" /> 日志
+        </CardTitle>
+        <CardDescription>应用与服务运行日志。服务/环境异常时点「导出日志」把 zip 发给支持排查。</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => void load()} disabled={busy}>
+            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} 刷新
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => void exportLogs()}>
+            <Download className="h-3 w-3" /> 导出日志
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => void clear()}>
+            <Trash2 className="h-3 w-3" /> 清空
+          </Button>
+        </div>
+        <pre className="max-h-72 min-h-24 overflow-y-auto whitespace-pre-wrap rounded-lg border border-cyber-border bg-cyber-bg p-2 font-mono text-[10px] leading-relaxed text-cyber-dim">
+          {lines.length > 0 ? lines.join('\n') : '（暂无日志）'}
+        </pre>
+      </CardContent>
+    </Card>
   )
 }

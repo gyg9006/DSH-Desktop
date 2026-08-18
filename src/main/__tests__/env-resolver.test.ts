@@ -115,6 +115,25 @@ describe('env-resolver 三级优先级（内置 → 工作区 → 系统）', ()
     expect(bundledToolPath('node')).toBeNull()
   })
 
+  it('bundledToolPath：dsh 解析需拼接 dir + bin（回归：lib/bin.js 而非裸 bin）', () => {
+    const envDir = path.join(tmp, 'env-dsh')
+    fs.mkdirSync(path.join(envDir, 'dsh-cli', 'lib'), { recursive: true })
+    fs.writeFileSync(path.join(envDir, 'dsh-cli', 'lib', 'bin.js'), 'x')
+    fs.writeFileSync(
+      path.join(envDir, 'env-manifest.json'),
+      JSON.stringify({ platform: process.platform, arch: process.arch, dsh: { version: '0.1.0-rc.7', dir: 'dsh-cli', bin: 'lib/bin.js' } })
+    )
+    process.env.DSH_PORTABLE_ENV_DIR = envDir
+    const hit = bundledToolPath('dsh')
+    expect(hit?.abs).toBe(path.join(envDir, 'dsh-cli', 'lib', 'bin.js'))
+    // 缺 dir 或 bin → null
+    const bad = path.join(tmp, 'env-dsh-bad')
+    fs.mkdirSync(bad, { recursive: true })
+    fs.writeFileSync(path.join(bad, 'env-manifest.json'), JSON.stringify({ dsh: { version: '1.0.0' } }))
+    process.env.DSH_PORTABLE_ENV_DIR = bad
+    expect(bundledToolPath('dsh')).toBeNull()
+  })
+
   it('portableEnvDir / readEnvManifest 基本行为', () => {
     expect(portableEnvDir()).toBeNull()
     expect(readEnvManifest(null)).toBeNull()

@@ -4,6 +4,15 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.4] - 2026-08-18
+
+### 修复
+
+- **「跳过引导」后一键启动服务失败**（闭环修复）：`env-resolver` 的 dsh 内置解析漏拼 `dir` 前缀（返回 `lib/bin.js` 而非 `dsh-cli/lib/bin.js`）→ 内置 dsh 永远识别不到，点「启动服务」误报「未安装 dsh」。已修复并补单测；
+- **启动服务自动启用内置环境**：`startDshService` 检测到内置 dsh 未安装时自动启用（内置 node + dsh 复制 + 依赖安装，免手动一键安装），服务可直接启动；
+- **内置 dsh 依赖安装**：`installDsh` 目录形态由 `npm install <目录> --prefix`（file:link 语义不装依赖）改为复制到工作区后在包内 `npm install`（551 依赖完整解析），并新增端到端单测（真实内置包 + 干净工作区，dsh --version 可运行）；
+- **新增设置 → 高级 → 日志卡片**：查看应用/dsh 服务日志、一键导出 zip（排查问题时附上）、清空日志。
+
 ## [2.1.3] - 2026-08-18
 
 ### 新增

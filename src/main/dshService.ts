@@ -12,7 +12,8 @@ import path from 'node:path'
 import { logger } from './logger'
 import { getWorkspaceDir, readAppConfig, updateAppConfig } from './config'
 import { buildDshEnv } from './envCheck'
-import { resolveEnvTool } from './env-resolver'
+import { resolveEnvTool, bundledToolPath } from './env-resolver'
+import { runInstall } from './installer'
 import { runCommand, killProcessTree } from './utils/process'
 import { readApiConfig, buildProxyEnv } from './apiConfig'
 import { collectProviderEnv } from './modelsDshSync'
@@ -202,7 +203,19 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
   const svc = (config.service ?? {}) as ServiceConfig
   // dsh 启动入口动态解析（版本升级兼容）：读取 dsh 包 package.json 的 bin 字段，
   // 避免硬编码 lib/bin.js 在 dsh 升级改包结构后失效。
-  const dshBin = resolveDshBin(workspaceDir)
+  let dshBin = resolveDshBin(workspaceDir)
+  if (!dshBin && bundledToolPath('dsh')) {
+    // 内置 dsh 可用但未安装到工作区 → 自动启用（内置主包 + 依赖安装，免手动一键安装）
+    pushLog('检测到内置 dsh，正在自动启用（免手动安装）…')
+    const inst = await runInstall(workspaceDir, 'dsh', 'install', {
+      log: (m) => pushLog(m),
+      progress: () => undefined
+    })
+    if (!inst.ok) {
+      return { ok: false, error: `内置 dsh 自动启用失败：${inst.error ?? '未知错误'}（可稍后在「设置 → 环境检测」中手动重试）` }
+    }
+    dshBin = resolveDshBin(workspaceDir)
+  }
   if (!dshBin) {
     return { ok: false, error: '未安装 DeepSeek Harness（dsh）。请在「设置 → 环境检测」中一键安装' }
   }

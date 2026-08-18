@@ -49,7 +49,7 @@ export interface ResolvedEnvTool {
 function exeRel(key: EnvItemKey, manifest: EnvManifest): string | null {
   const entry = manifest[key] as EnvManifestEntry | undefined
   if (!entry?.dir) return null
-  if (key === 'dsh') return entry.bin ?? null
+  if (key === 'dsh') return entry.bin ? path.posix.join(entry.dir, entry.bin) : null
   if (entry.exe) return path.posix.join(entry.dir, entry.exe.replace(/\\/g, '/'))
   // 回退：按平台推导默认可执行名
   if (key === 'node') return path.posix.join(entry.dir, process.platform === 'win32' ? 'node.exe' : 'bin/node')

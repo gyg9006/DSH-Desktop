@@ -754,17 +754,21 @@ async function installDsh(
 
   const bundledDsh = bundled('dsh')
   if (bundledDsh?.dirPath) {
-    // 新形态：内置 dsh-cli 解压目录 → npm install <dir>（免下载主包，自动解析 dependencies）
+    // 新形态：内置 dsh-cli 解压目录 → 复制到工作区后在其内部 npm install（解析 dependencies）
+    // 注意：npm install <本地目录> --prefix 是 file:link 语义不装依赖，必须在包内执行 install
     cbs.log(`使用内置便携环境：dsh ${bundledDsh.version}（免下载主包，安装依赖中…）`)
     if (!fs.existsSync(path.join(bundledDsh.dirPath, 'package.json'))) {
       throw new InstallError('内置 dsh 包缺少 package.json')
     }
-    fs.mkdirSync(dshDir, { recursive: true })
-    const { command, args } = npmCliArgs(nodeDir, ['install', bundledDsh.dirPath, '--prefix', dshDir, '--no-audit', '--no-fund'])
+    const target = path.join(dshDir, 'node_modules', '@deepseek-ai', 'dsh')
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true })
+    fs.cpSync(bundledDsh.dirPath, target, { recursive: true })
+    const { command, args } = npmCliArgs(nodeDir, ['install', '--no-audit', '--no-fund'])
     const result = await runCommand({
       command,
       args,
-      cwd: dshDir,
+      cwd: target,
       env: buildInstallEnv(workspaceDir),
       timeoutMs: INSTALL_TIMEOUT_MS,
       signal,

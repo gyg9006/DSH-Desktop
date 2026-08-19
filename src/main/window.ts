@@ -2,7 +2,7 @@
  * 主窗口创建与窗口状态记忆（默认 1280×800，最小 1000×640）。
  * 窗口状态存入 <workspace>/config/window-state.json，随工作文件夹迁移。
  */
-import { BrowserWindow, dialog, screen } from 'electron'
+import { app, BrowserWindow, dialog, screen } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { logger } from './logger'
@@ -114,7 +114,7 @@ export function createMainWindow(workspaceDir: string, theme: ThemeMode): Browse
     frame: false, // v2.0 自定义无边框标题栏
     backgroundColor: backgroundColorFor(theme, workspaceDir),
     autoHideMenuBar: true,
-    title: 'DSH-Desktop',
+    title: `DSH-Desktop v${app.getVersion()}`,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),

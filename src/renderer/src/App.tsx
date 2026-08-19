@@ -5,7 +5,6 @@ import { Sidebar, type ViewKey } from './components/layout/Sidebar'
 import { Footer } from './components/layout/Footer'
 import { Home } from './components/views/Home'
 import { DSHCore } from './components/views/DSHCore'
-import { SessionMgr } from './components/views/SessionMgr'
 import { AgentMgr } from './components/views/AgentMgr'
 import { KnowledgeBase } from './components/views/KnowledgeBase'
 import { SkillMgr } from './components/views/SkillMgr'
@@ -58,8 +57,6 @@ export default function App({ initialOnboarded, appVersion, onOnboarded }: AppPr
     switch (view) {
       case 'workbench':
         return <DSHCore />
-      case 'sessions':
-        return <SessionMgr />
       case 'agents':
         return <AgentMgr />
       case 'knowledge':

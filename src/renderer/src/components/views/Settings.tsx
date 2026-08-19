@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { JSX } from 'react'
-import { Settings as SettingsIcon, Palette, Keyboard, Info, Cpu, ScrollText, KeyRound } from 'lucide-react'
+import { Settings as SettingsIcon, Palette, Keyboard, Info, Cpu, ScrollText } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { GeneralSection } from './settings/GeneralSection'
 import { AppearanceSection } from './settings/AppearanceSection'
@@ -8,13 +8,11 @@ import { ShortcutsSection } from './settings/ShortcutsSection'
 import { AdvancedSection } from './settings/AdvancedSection'
 import { AboutSection } from './settings/AboutSection'
 import { RulesSection } from './settings/RulesSection'
-import { ModelsSection } from './settings/ModelsSection'
 
-type SettingSection = 'general' | 'appearance' | 'shortcuts' | 'about' | 'advanced' | 'rules' | 'models'
+type SettingSection = 'general' | 'appearance' | 'shortcuts' | 'about' | 'advanced' | 'rules'
 
 const SECTIONS: Array<{ key: SettingSection; name: string; icon: typeof SettingsIcon }> = [
   { key: 'general', name: '通用', icon: SettingsIcon },
-  { key: 'models', name: '模型与 API', icon: KeyRound },
   { key: 'appearance', name: '外观', icon: Palette },
   { key: 'shortcuts', name: '快捷键', icon: Keyboard },
   { key: 'about', name: '关于', icon: Info },
@@ -33,8 +31,6 @@ export function Settings(): JSX.Element {
     switch (section) {
       case 'general':
         return <GeneralSection />
-      case 'models':
-        return <ModelsSection />
       case 'appearance':
         return <AppearanceSection />
       case 'shortcuts':

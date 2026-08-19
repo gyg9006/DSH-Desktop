@@ -2,7 +2,6 @@ import type { LucideIcon } from 'lucide-react'
 import type { JSX } from 'react'
 import {
   LayoutGrid,
-  StickyNote,
   Bot,
   Database,
   Puzzle,
@@ -11,7 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
-export type ViewKey = 'workbench' | 'sessions' | 'agents' | 'knowledge' | 'skills' | 'settings'
+export type ViewKey = 'workbench' | 'agents' | 'knowledge' | 'skills' | 'settings'
 
 export interface NavItem {
   key: ViewKey
@@ -22,7 +21,6 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { key: 'workbench', name: '核心工作台', desc: 'DSH 对话 / 会话操作', icon: LayoutGrid },
-  { key: 'sessions', name: '会话管理', desc: '便签式分组卡片', icon: StickyNote },
   { key: 'agents', name: 'Agent 管理', desc: 'GitHub Agent 项目', icon: Bot },
   { key: 'knowledge', name: '知识库', desc: '提炼 / 检索 / 迭代', icon: Database },
   { key: 'skills', name: 'Skill 管理', desc: '插件 / 技能市场', icon: Puzzle },

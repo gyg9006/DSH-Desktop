@@ -23,45 +23,11 @@ import type { ExtractStepKey, KnowledgeCategory } from '@shared/ipc'
  * 这里在 dsh 界面加载后注入 JS 隐藏引导类弹窗/遮罩（兜底；主路径是 settings.yaml 已写入
  * llm-deepseek 预设模型，dsh 不再进入「未配置」引导态）。
  */
-const HIDE_DSH_ONBOARDING_JS = `(() => {
-  // 只处理明确的 onboarding/API Key 引导，绝不隐藏普通 dialog、modal、setup 或会话层，
-  // 避免更新后 DSH 对话区出现毛玻璃/遮罩残留和点击无响应。
-  const hide = () => {
-    const candidates = [
-      ...document.querySelectorAll('[data-onboarding], [data-testid*="onboarding"], [class*="onboarding"], [class*="Onboarding"]')
-    ]
-    for (const el of candidates) {
-      const e = el
-      if (e && e.style) { e.style.display = 'none'; e.style.visibility = 'hidden'; e.removeAttribute('inert') }
-    }
-    for (const el of document.querySelectorAll('[role="dialog"]')) {
-      const text = (el.textContent || '').slice(0, 1200)
-      if (/api\\s*key|api\\s*密钥|配置.*密钥|onboarding|getting started|welcome to/i.test(text)) {
-        const e = el
-        if (e.style) { e.style.display = 'none'; e.style.visibility = 'hidden' }
-      }
-    }
-    const root = document.getElementById('root') || document.body
-    if (root && root.hasAttribute('inert')) root.removeAttribute('inert')
-  }
-  hide()
-  let runs = 0
-  try {
-    const mo = new MutationObserver(() => { if (++runs < 80) hide(); else mo.disconnect() })
-    mo.observe(document.body, { childList: true, subtree: true })
-    setTimeout(() => mo.disconnect(), 10000)
-  } catch { /* 忽略 */ }
-  setTimeout(hide, 1000)
-  setTimeout(hide, 3000)
-})()`
+/** DSH Web 是唯一的模型、Key、会话和消息实现；宿主不注入或改写其 DOM。 */
 
 export function DSHCore(): JSX.Element {
   const service = useDshService()
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
-  // dsh 界面加载完成后注入引导屏蔽 JS（API Key/onboarding 弹窗由客户端设置统一管理）
-  const injectHideOnboarding = useCallback((): void => {
-    webviewRef.current?.executeJavaScript(HIDE_DSH_ONBOARDING_JS).catch(() => undefined)
-  }, [])
   const [dshUrl, setDshUrl] = useState('')
   const [webviewReady, setWebviewReady] = useState(false)
   const [webviewTimedOut, setWebviewTimedOut] = useState(false)
@@ -86,8 +52,7 @@ export function DSHCore(): JSX.Element {
   const onWebviewReady = useCallback((): void => {
     setWebviewReady(true)
     setWebviewTimedOut(false)
-    injectHideOnboarding()
-  }, [injectHideOnboarding])
+  }, [])
 
   useEffect(() => {
     void (async () => {

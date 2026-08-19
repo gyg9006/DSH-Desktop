@@ -80,6 +80,7 @@ function Boot(): JSX.Element {
       try {
         const [config, info] = await Promise.all([window.dshw.getConfig(), window.dshw.getAppInfo()])
         const currentVersion = info.appVersion || '0.0.0'
+        document.title = `DSH-Desktop v${currentVersion}`
         if (alive) {
           setAppVersion(currentVersion)
           // 旧版 onboarded 不足以跳过新版本引导；每个版本首次打开展示一次。

@@ -22,6 +22,7 @@ import { getWorkspaceDir, getRootDir } from './config'
 import { readJsonFile, writeJsonAtomic } from '../shared/workspace'
 import { parseVersion, compareVersions, formatVersionString } from '../shared/version'
 import { fastDownload, pickFastestMirror, verifySha256File } from './fastDownloader'
+import { snapshotCustomizations, verifyCustomizations } from './customizations'
 
 /** 更新源仓库（owner/repo）。可通过环境变量覆盖（如私有镜像仓库）。 */
 export const UPDATE_REPO = (process.env.UPDATE_REPO as string | undefined) || 'gyg9006/DSH-Desktop'
@@ -476,6 +477,14 @@ export function applyUpdate(zipPath: string): { ok: boolean; error?: string } {
       writeUpdateReport(ws, { fromVersion, toVersion: '?', smoke: false, smokeError: smoke.error })
       logger.error(`更新包冒烟测试失败，已中止更新：${smoke.error}`)
       return { ok: false, error: `更新包冒烟测试失败（${smoke.error}），已中止更新，当前版本不受影响` }
+    }
+
+    // 更新前快照个性化配置（DSH 更新只替换 app，用户配置与 profiles 隔离）
+    const snapshotDir = snapshotCustomizations(ws)
+    const customizationReport = verifyCustomizations(ws, snapshotDir)
+    if (!customizationReport.ok) {
+      writeUpdateReport(ws, { fromVersion, toVersion: '?', smoke: false, smokeError: `个性化快照失败：${customizationReport.missing.join(', ')}` })
+      return { ok: false, error: `个性化配置快照失败（${customizationReport.missing.join(', ')}），已中止更新` }
     }
 
     // 清理可能的残留

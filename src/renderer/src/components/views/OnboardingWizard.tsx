@@ -27,7 +27,7 @@ const STEP_META: Array<{ key: StepKey; title: string; desc: string; icon: typeof
   { key: 2, title: '环境检测', desc: 'Node.js、Git、网络和 DSH 运行环境', icon: HardDrive }
 ]
 
-/** 独立两步引导：只负责工作目录和运行环境，模型/API Key 由 DSH 原生服务管理。 */
+/** 独立两步引导：只负责工作目录和运行环境，认证与模型配置由 DSH 原生服务管理。 */
 export function OnboardingWizard({ appVersion, onComplete }: OnboardingWizardProps): JSX.Element {
   const { toast } = useToast()
   const [step, setStep] = useState<StepKey>(1)
@@ -138,7 +138,7 @@ export function OnboardingWizard({ appVersion, onComplete }: OnboardingWizardPro
           <CardContent className="space-y-4">
             {step === 1 && <>
               <div className="rounded-lg border border-cyber-border bg-cyber-panel2 px-3 py-2.5 text-xs"><div className="mb-1 flex items-center gap-1.5 text-cyber-dim"><HardDrive className="h-3.5 w-3.5" /> 当前 DSH 工作文件夹</div><div className="break-all font-mono text-cyber-text">{workspacePath}</div></div>
-              <p className="text-[11px] leading-relaxed text-cyber-faint">DSH 原生服务将在此目录读写配置、会话、知识库、技能和日志。API Key 与模型配置请在 DSH 完整服务界面中管理。</p>
+              <p className="text-[11px] leading-relaxed text-cyber-faint">DSH 原生服务将在此目录读写配置、会话、知识库、技能和日志。认证与模型配置请在 DSH 完整服务界面中管理。</p>
               <div className="flex items-center justify-between gap-2"><Button size="sm" variant="ghost" onClick={() => void skip()} disabled={completing}><SkipForward className="h-3.5 w-3.5" /> 跳过</Button><div className="flex items-center gap-2"><Button size="sm" variant="outline" onClick={() => void chooseWorkspace()} disabled={relaunching}><FolderOpen className="h-3.5 w-3.5" /> 更改位置…</Button><Button size="sm" onClick={() => setStep(2)} disabled={relaunching || workspacePath === '加载中…'}>下一步 <ArrowRight className="h-3.5 w-3.5" /></Button></div></div>
             </>}
             {step === 2 && <>
@@ -148,7 +148,7 @@ export function OnboardingWizard({ appVersion, onComplete }: OnboardingWizardPro
             </>}
           </CardContent>
         </Card>
-        <p className="mt-4 text-center text-[10px] text-cyber-faint">引导页独立渲染，不依赖 DSH 服务；模型/API Key 由 DSH 原生界面管理。</p>
+        <p className="mt-4 text-center text-[10px] text-cyber-faint">引导页独立渲染，不依赖 DSH 服务；认证与模型配置 由 DSH 原生界面管理。</p>
       </div>
     </div>
   )

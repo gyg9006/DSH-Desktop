@@ -14,6 +14,10 @@ export function TitleBar(): JSX.Element {
 
   useEffect(() => {
     void window.dshw.windowIsMaximized().then(setMaximized).catch(() => undefined)
+    void window.dshw.getAppInfo().then((info) => {
+      const version = info.appVersion || '0.0.0'
+      document.title = `DSH-Desktop v${version}`
+    }).catch(() => undefined)
   }, [])
 
   const onMaximize = async (): Promise<void> => {

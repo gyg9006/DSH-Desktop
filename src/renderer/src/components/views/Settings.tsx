@@ -22,7 +22,7 @@ const SECTIONS: Array<{ key: SettingSection; name: string; icon: typeof Settings
 
 /**
  * 模块6：设置 —— 左侧子菜单 + 右侧表单。
- * 通用、模型与 API（全域对接中心）、外观、快捷键、关于、高级配置、全局行为（永久指令）。
+ * 通用、外观、快捷键、关于、高级配置、全局行为（永久指令）。
  */
 export function Settings(): JSX.Element {
   const [section, setSection] = useState<SettingSection>('general')

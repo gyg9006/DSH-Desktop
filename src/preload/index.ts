@@ -61,11 +61,6 @@ import type {
   KnowledgePipelineResult,
   KnowledgePipelineProgress,
   RecentSessionTextResult,
-  ModelsViewPayload,
-  ModelsProviderSetInput,
-  ModelsCustomUpsertInput,
-  ModelsTestInput,
-  ModelsTestResult,
   ThemeInfoPayload,
   ActiveThemePayload,
   AgentsPayload,
@@ -416,23 +411,6 @@ const api = {
   getGlobalRules: (): Promise<{ ok: boolean; path: string; content: string }> => ipcRenderer.invoke(IPC.RulesGet),
   saveGlobalRules: (content: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.RulesSave, content),
-
-  // ===== v2.0：全域模型对接中心 =====
-  modelsGet: (): Promise<ModelsViewPayload> => ipcRenderer.invoke(IPC.ModelsGet),
-  modelsProviderSet: (input: ModelsProviderSetInput): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC.ModelsProviderSet, input),
-  modelsCustomUpsert: (input: ModelsCustomUpsertInput): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC.ModelsCustomUpsert, input),
-  modelsCustomDelete: (id: string): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC.ModelsCustomDelete, id),
-  modelsKeySave: (providerId: string, key: string): Promise<{ ok: boolean; mask?: string; error?: string }> =>
-    ipcRenderer.invoke(IPC.ModelsKeySave, providerId, key),
-  modelsKeyDelete: (providerId: string): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC.ModelsKeyDelete, providerId),
-  modelsTest: (input: ModelsTestInput): Promise<ModelsTestResult> => ipcRenderer.invoke(IPC.ModelsTest, input),
-  modelsList: (input: ModelsTestInput): Promise<{ ok: boolean; models?: string[]; error?: string }> =>
-    ipcRenderer.invoke(IPC.ModelsList, input),
-  modelsMigrateLegacy: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke(IPC.ModelsMigrateLegacy),
 
   // ===== v2.0：主题全局化 =====
   themeList: (): Promise<ThemeInfoPayload[]> => ipcRenderer.invoke(IPC.ThemeList),

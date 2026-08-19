@@ -173,6 +173,8 @@ export interface AppInfo {
 export interface AppConfig {
   workspacePath?: string
   onboarded?: boolean
+  /** 已完成引导的客户端版本；新版本可再次展示一次引导，不覆盖用户数据。 */
+  onboardingVersion?: string
   theme?: ThemeMode
   sidebarCollapsed?: boolean
   [key: string]: unknown

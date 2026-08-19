@@ -38,6 +38,7 @@ import {
 } from '../../lib/onboarding'
 
 interface OnboardingWizardProps {
+  appVersion: string
   onComplete: () => void
 }
 
@@ -62,7 +63,7 @@ const STEP_META: Array<{ key: StepKey; title: string; desc: string; icon: typeof
  * Step 1 工作文件夹 → Step 2 环境检测/一键安装 → Step 3 API Key 配置并测试。
  * 完成：写 onboarded:true → 自动启动 dsh 服务 → 进入主界面。
  */
-export function OnboardingWizard({ onComplete }: OnboardingWizardProps): JSX.Element {
+export function OnboardingWizard({ appVersion, onComplete }: OnboardingWizardProps): JSX.Element {
   const { toast } = useToast()
   const [step, setStep] = useState<StepKey>(1)
 
@@ -199,7 +200,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps): JSX.Ele
   const complete = useCallback(async (): Promise<void> => {
     setCompleting(true)
     try {
-      const saved = await window.dshw.updateConfig({ onboarded: true })
+      const saved = await window.dshw.updateConfig({ onboarded: true, onboardingVersion: appVersion })
       if (!saved.ok) {
         toast(saved.error ?? '保存配置失败', 'error')
         setCompleting(false)
@@ -228,7 +229,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps): JSX.Ele
     }
     setCompleting(true)
     try {
-      const saved = await window.dshw.updateConfig({ onboarded: true })
+      const saved = await window.dshw.updateConfig({ onboarded: true, onboardingVersion: appVersion })
       if (!saved.ok) {
         toast(saved.error ?? '跳过引导保存失败', 'error')
         setCompleting(false)

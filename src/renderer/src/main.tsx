@@ -72,15 +72,24 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 function Boot(): JSX.Element {
   const [ready, setReady] = useState(false)
   const [onboarded, setOnboarded] = useState(false)
+  const [appVersion, setAppVersion] = useState('0.0.0')
 
   useEffect(() => {
     let alive = true
     void (async () => {
       try {
-        const config = await window.dshw.getConfig()
-        if (alive) setOnboarded(config?.onboarded === true)
+        const [config, info] = await Promise.all([window.dshw.getConfig(), window.dshw.getAppInfo()])
+        const currentVersion = info.appVersion || '0.0.0'
+        if (alive) {
+          setAppVersion(currentVersion)
+          // 旧版 onboarded 不足以跳过新版本引导；每个版本首次打开展示一次。
+          setOnboarded(config?.onboarded === true && config?.onboardingVersion === currentVersion)
+        }
       } catch {
-        if (alive) setOnboarded(false)
+        if (alive) {
+          setOnboarded(false)
+          setAppVersion('0.0.0')
+        }
       } finally {
         if (alive) setReady(true)
       }
@@ -111,7 +120,7 @@ function Boot(): JSX.Element {
 
   return (
     <ErrorBoundary>
-      <App initialOnboarded={onboarded} onOnboarded={() => setOnboarded(true)} />
+      <App initialOnboarded={onboarded} appVersion={appVersion} onOnboarded={() => setOnboarded(true)} />
     </ErrorBoundary>
   )
 }

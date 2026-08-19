@@ -18,6 +18,8 @@ import { useTheme } from './hooks/useTheme'
 interface AppProps {
   /** 首次启动引导是否已完成（读取自 workspace/config/app.json 的 onboarded）。 */
   initialOnboarded: boolean
+  /** 当前客户端版本，用于版本化引导完成标记。 */
+  appVersion: string
   /** 引导完成回调（父级刷新 onboarded 状态）。 */
   onOnboarded: () => void
 }
@@ -32,7 +34,7 @@ function isOnboardingRoute(): boolean {
  * 入口守卫（onboarded !== true → 渲染独立三步引导，不依赖服务/配置）；
  * 自定义标题栏 + 左侧导航（6 模块）+ 主内容区 + 底部状态栏。
  */
-export default function App({ initialOnboarded, onOnboarded }: AppProps): JSX.Element {
+export default function App({ initialOnboarded, appVersion, onOnboarded }: AppProps): JSX.Element {
   const [onboarded, setOnboarded] = useState<boolean>(initialOnboarded)
   const [view, setView] = useState<ViewKey>('workbench')
   useTheme() // 应用持久化主题（dark class），引导页同样生效
@@ -41,6 +43,7 @@ export default function App({ initialOnboarded, onOnboarded }: AppProps): JSX.El
     return (
       <ToastProvider>
         <OnboardingWizard
+          appVersion={appVersion}
           onComplete={() => {
             onOnboarded()
             setOnboarded(true)

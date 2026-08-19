@@ -24,28 +24,32 @@ import type { ExtractStepKey, KnowledgeCategory } from '@shared/ipc'
  * llm-deepseek 预设模型，dsh 不再进入「未配置」引导态）。
  */
 const HIDE_DSH_ONBOARDING_JS = `(() => {
+  // 只处理明确的 onboarding/API Key 引导，绝不隐藏普通 dialog、modal、setup 或会话层，
+  // 避免更新后 DSH 对话区出现毛玻璃/遮罩残留和点击无响应。
   const hide = () => {
-    const sels = [
-      '[data-onboarding]', '[class*="onboarding"]', '[class*="Onboarding"]',
-      '[class*="welcome"]', '[class*="api-key"]', '[class*="ApiKey"]',
-      '[class*="setup"]', '[class*="setup-guide"]', '[role="dialog"]', '[class*="modal"]'
+    const candidates = [
+      ...document.querySelectorAll('[data-onboarding], [data-testid*="onboarding"], [class*="onboarding"], [class*="Onboarding"]')
     ]
-    for (const sel of sels) {
-      try {
-        document.querySelectorAll(sel).forEach((el) => {
-          const e = el
-          if (e && e.style) { e.style.display = 'none'; e.style.visibility = 'hidden' }
-        })
-      } catch { /* 忽略 */ }
+    for (const el of candidates) {
+      const e = el
+      if (e && e.style) { e.style.display = 'none'; e.style.visibility = 'hidden'; e.removeAttribute('inert') }
+    }
+    for (const el of document.querySelectorAll('[role="dialog"]')) {
+      const text = (el.textContent || '').slice(0, 1200)
+      if (/api\\s*key|api\\s*密钥|配置.*密钥|onboarding|getting started|welcome to/i.test(text)) {
+        const e = el
+        if (e.style) { e.style.display = 'none'; e.style.visibility = 'hidden' }
+      }
     }
     const root = document.getElementById('root') || document.body
     if (root && root.hasAttribute('inert')) root.removeAttribute('inert')
-    document.documentElement.removeAttribute('inert')
   }
   hide()
+  let runs = 0
   try {
-    const mo = new MutationObserver(hide)
+    const mo = new MutationObserver(() => { if (++runs < 80) hide(); else mo.disconnect() })
     mo.observe(document.body, { childList: true, subtree: true })
+    setTimeout(() => mo.disconnect(), 10000)
   } catch { /* 忽略 */ }
   setTimeout(hide, 1000)
   setTimeout(hide, 3000)
@@ -59,6 +63,8 @@ export function DSHCore(): JSX.Element {
     webviewRef.current?.executeJavaScript(HIDE_DSH_ONBOARDING_JS).catch(() => undefined)
   }, [])
   const [dshUrl, setDshUrl] = useState('')
+  const [webviewReady, setWebviewReady] = useState(false)
+  const [webviewTimedOut, setWebviewTimedOut] = useState(false)
   const running = service.status === 'running'
   // 会话背景（需求五）：仅对话区域容器
   const [bgStyle, setBgStyle] = useState<React.CSSProperties>({})
@@ -66,10 +72,22 @@ export function DSHCore(): JSX.Element {
   useEffect(() => {
     if (running && service.port) {
       setDshUrl(`http://localhost:${service.port}/`)
-    } else {
-      setDshUrl('')
+      setWebviewReady(false)
+      setWebviewTimedOut(false)
+      const timer = window.setTimeout(() => setWebviewTimedOut(true), 10000)
+      return () => window.clearTimeout(timer)
     }
+    setDshUrl('')
+    setWebviewReady(false)
+    setWebviewTimedOut(false)
+    return undefined
   }, [running, service.port])
+
+  const onWebviewReady = useCallback((): void => {
+    setWebviewReady(true)
+    setWebviewTimedOut(false)
+    injectHideOnboarding()
+  }, [injectHideOnboarding])
 
   useEffect(() => {
     void (async () => {
@@ -126,15 +144,15 @@ export function DSHCore(): JSX.Element {
       </div>
 
       {/* webview / 空态（会话背景作用于此对话区域） */}
-      <div className="min-h-0 flex-1" style={bgStyle}>
+      <div className="relative min-h-0 flex-1" style={bgStyle}>
         {running && dshUrl ? (
           <webview
             ref={(el) => {
               const wv = (el as Electron.WebviewTag | null) ?? null
               webviewRef.current = wv
               if (wv) {
-                wv.removeEventListener('did-finish-load', injectHideOnboarding)
-                wv.addEventListener('did-finish-load', injectHideOnboarding)
+                wv.removeEventListener('did-finish-load', onWebviewReady)
+                wv.addEventListener('did-finish-load', onWebviewReady)
               }
             }}
             src={dshUrl}
@@ -158,6 +176,25 @@ export function DSHCore(): JSX.Element {
               {service.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               启动服务
             </Button>
+          </div>
+        )}
+        {running && dshUrl && !webviewReady && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-cyber-bg/95">
+            <div className="flex flex-col items-center gap-3 text-center">
+              {webviewTimedOut ? (
+                <>
+                  <div className="text-sm text-cyber-red">服务启动超时，请重试</div>
+                  <Button size="sm" variant="outline" onClick={() => webviewRef.current?.reload()}>
+                    <RefreshCw className="h-3.5 w-3.5" /> 重启会话界面
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin text-cyber-neon" />
+                  <div className="text-xs text-cyber-dim">正在加载 DSH 会话界面…</div>
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>

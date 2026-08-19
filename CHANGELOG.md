@@ -4,6 +4,16 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.10] - 2026-08-19
+
+### 回归加固
+
+- 首次启动按客户端版本显示三步引导；已完成用户可在设置中重新体验，更新提示保持非阻断；
+- DSH webview 只屏蔽明确 API Key/onboarding 弹窗，普通会话层不再被误遮罩；10 秒未就绪显示可重试提示；
+- 默认模型配置保留 `llm-deepseek` 预设，设置 Key 后同步凭据与模型列表；
+- 自定义标题栏动态显示 `DSH-Desktop v{version}`；固定端口保存后自动重启服务；
+- 更新前快照 `.dsh/backups/pre-update-*` 与 `user-customizations-manifest.json`，更新后缺失的个性化文件自动恢复。
+
 ## [2.1.9] - 2026-08-19
 
 ### 新增

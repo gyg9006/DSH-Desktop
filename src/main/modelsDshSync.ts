@@ -89,7 +89,9 @@ export function syncModelsConfigToDsh(workspaceDir: string): { ok: boolean; erro
         section.models = dsModels
       }
       existing['llm-deepseek'] = section
-    } else {
+    } else if (hasAnyProvider) {
+      // 用户明确存在其它厂商配置且 DeepSeek 未启用时才移除；
+      // 完全未配置时保留上方默认 DeepSeek 模型，保证选择器不为空。
       delete existing['llm-deepseek']
     }
 

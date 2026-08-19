@@ -33,6 +33,30 @@ function sha256(file: string): string {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 }
 
+/** 对文件/目录生成稳定哈希；目录纳入相对路径，能检测更新意外修改个性化内容。 */
+function contentHash(target: string): string {
+  const stat = fs.lstatSync(target)
+  if (!stat.isDirectory()) return sha256(target)
+  const hash = crypto.createHash('sha256')
+  const walk = (dir: string, rel: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const child = path.join(dir, entry.name)
+      const childRel = path.join(rel, entry.name).replace(/\\/g, '/')
+      if (entry.isSymbolicLink()) {
+        hash.update(`link:${childRel}:${fs.readlinkSync(child)}\n`)
+      } else if (entry.isDirectory()) {
+        walk(child, childRel)
+      } else {
+        hash.update(`file:${childRel}:`)
+        hash.update(fs.readFileSync(child))
+        hash.update('\n')
+      }
+    }
+  }
+  walk(target, '')
+  return hash.digest('hex')
+}
+
 function copyEntry(workspaceDir: string, snapshotDir: string, source: string, profile: string): CustomizationEntry | null {
   const sourcePath = path.join(workspaceDir, source)
   if (!fs.existsSync(sourcePath)) return null
@@ -40,7 +64,7 @@ function copyEntry(workspaceDir: string, snapshotDir: string, source: string, pr
   const target = path.join(snapshotDir, profile)
   if (stat.isDirectory()) {
     fs.cpSync(sourcePath, target, { recursive: true, dereference: false })
-    return { source, profile, kind: 'directory' }
+    return { source, profile, kind: 'directory', sha256: contentHash(sourcePath) }
   }
   fs.mkdirSync(path.dirname(target), { recursive: true })
   fs.copyFileSync(sourcePath, target)
@@ -76,7 +100,10 @@ export function restoreCustomizations(workspaceDir: string, snapshotDir: string)
       const target = path.join(workspaceDir, entry.source)
       const backup = path.join(snapshotDir, entry.profile)
       if (!fs.existsSync(backup)) continue
-      if (fs.existsSync(target)) continue
+      const targetExists = fs.existsSync(target)
+      const targetHash = targetExists ? contentHash(target) : undefined
+      if (targetExists && (!entry.sha256 || targetHash === entry.sha256)) continue
+      if (targetExists) fs.rmSync(target, { recursive: true, force: true })
       fs.mkdirSync(path.dirname(target), { recursive: true })
       if (entry.kind === 'directory') fs.cpSync(backup, target, { recursive: true, dereference: false })
       else fs.copyFileSync(backup, target)
@@ -91,7 +118,10 @@ export function restoreCustomizations(workspaceDir: string, snapshotDir: string)
 export function verifyCustomizations(workspaceDir: string, snapshotDir?: string): { ok: boolean; missing: string[]; restored: string[] } {
   const manifest = readCustomizationManifest(workspaceDir)
   if (!manifest) return { ok: false, missing: ['.dsh/user-customizations-manifest.json'], restored: [] }
-  const missing = manifest.entries.filter((e) => !fs.existsSync(path.join(workspaceDir, e.source))).map((e) => e.source)
+  const missing = manifest.entries.filter((e) => {
+    const target = path.join(workspaceDir, e.source)
+    return !fs.existsSync(target) || Boolean(e.sha256 && contentHash(target) !== e.sha256)
+  }).map((e) => e.source)
   if (missing.length === 0) return { ok: true, missing: [], restored: [] }
   if (!snapshotDir) return { ok: false, missing, restored: [] }
   const result = restoreCustomizations(workspaceDir, snapshotDir)

@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import type { JSX } from 'react'
 import { Minus, Square, Copy, X } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import { getAppVersion } from '../../lib/appInfo'
 
 /**
  * v2.0 自定义无边框标题栏：标题 + 窗口控制按钮。
@@ -11,12 +10,14 @@ import { getAppVersion } from '../../lib/appInfo'
  */
 export function TitleBar(): JSX.Element {
   const [maximized, setMaximized] = useState(false)
+  const [version, setVersion] = useState('0.0.0')
 
   useEffect(() => {
     void window.dshw.windowIsMaximized().then(setMaximized).catch(() => undefined)
     void window.dshw.getAppInfo().then((info) => {
-      const version = info.appVersion || '0.0.0'
-      document.title = `DSH-Desktop v${version}`
+      const next = info.appVersion || '0.0.0'
+      setVersion(next)
+      document.title = `DSH-Desktop v${next}`
     }).catch(() => undefined)
   }, [])
 
@@ -38,7 +39,7 @@ export function TitleBar(): JSX.Element {
           DSH-Desktop
         </span>
         <span className="ml-1 rounded border border-cyber-border px-1 py-px text-[9px] text-cyber-faint">
-          v{getAppVersion()}
+          v{version}
         </span>
       </div>
 

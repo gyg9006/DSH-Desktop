@@ -26,8 +26,10 @@ import type { ExtractStepKey, KnowledgeCategory } from '@shared/ipc'
 /** DSH Web 是唯一的模型、Key、会话和消息实现；宿主不注入或改写其 DOM。 */
 
 export function DSHCore(): JSX.Element {
+  const { toast } = useToast()
   const service = useDshService()
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
+  const autoStartAttempted = useRef(false)
   const [dshUrl, setDshUrl] = useState('')
   const [webviewReady, setWebviewReady] = useState(false)
   const [webviewTimedOut, setWebviewTimedOut] = useState(false)
@@ -40,7 +42,7 @@ export function DSHCore(): JSX.Element {
       setDshUrl(`http://localhost:${service.port}/`)
       setWebviewReady(false)
       setWebviewTimedOut(false)
-      const timer = window.setTimeout(() => setWebviewTimedOut(true), 10000)
+      const timer = window.setTimeout(() => setWebviewTimedOut(true), 15000)
       return () => window.clearTimeout(timer)
     }
     setDshUrl('')
@@ -53,6 +55,14 @@ export function DSHCore(): JSX.Element {
     setWebviewReady(true)
     setWebviewTimedOut(false)
   }, [])
+
+  useEffect(() => {
+    if (autoStartAttempted.current || service.status !== 'stopped') return
+    autoStartAttempted.current = true
+    void service.start().then((result) => {
+      if (!result.ok) toast(result.error ?? 'DSH 服务启动失败，请重试', 'error')
+    }).catch((error) => toast(`DSH 服务启动失败：${String(error)}`, 'error'))
+  }, [service.status, service.start, toast])
 
   useEffect(() => {
     void (async () => {

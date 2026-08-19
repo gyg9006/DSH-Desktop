@@ -18,10 +18,46 @@ import type { ExtractStepKey, KnowledgeCategory } from '@shared/ipc'
  * - 嵌入完整 DSH Web 界面（webview），保留全部功能；
  * - 会话导入（文件夹 / 文件）；
  * - 「提炼会话」：一键智能提炼流水线（SkillOrchestrator 六步编排，进度实时展示）。
+ *
+ * API Key 引导屏蔽：dsh 的 API Key / onboarding 弹窗由客户端「设置 → 模型与 API」统一管理，
+ * 这里在 dsh 界面加载后注入 JS 隐藏引导类弹窗/遮罩（兜底；主路径是 settings.yaml 已写入
+ * llm-deepseek 预设模型，dsh 不再进入「未配置」引导态）。
  */
+const HIDE_DSH_ONBOARDING_JS = `(() => {
+  const hide = () => {
+    const sels = [
+      '[data-onboarding]', '[class*="onboarding"]', '[class*="Onboarding"]',
+      '[class*="welcome"]', '[class*="api-key"]', '[class*="ApiKey"]',
+      '[class*="setup"]', '[class*="setup-guide"]', '[role="dialog"]', '[class*="modal"]'
+    ]
+    for (const sel of sels) {
+      try {
+        document.querySelectorAll(sel).forEach((el) => {
+          const e = el
+          if (e && e.style) { e.style.display = 'none'; e.style.visibility = 'hidden' }
+        })
+      } catch { /* 忽略 */ }
+    }
+    const root = document.getElementById('root') || document.body
+    if (root && root.hasAttribute('inert')) root.removeAttribute('inert')
+    document.documentElement.removeAttribute('inert')
+  }
+  hide()
+  try {
+    const mo = new MutationObserver(hide)
+    mo.observe(document.body, { childList: true, subtree: true })
+  } catch { /* 忽略 */ }
+  setTimeout(hide, 1000)
+  setTimeout(hide, 3000)
+})()`
+
 export function DSHCore(): JSX.Element {
   const service = useDshService()
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
+  // dsh 界面加载完成后注入引导屏蔽 JS（API Key/onboarding 弹窗由客户端设置统一管理）
+  const injectHideOnboarding = useCallback((): void => {
+    webviewRef.current?.executeJavaScript(HIDE_DSH_ONBOARDING_JS).catch(() => undefined)
+  }, [])
   const [dshUrl, setDshUrl] = useState('')
   const running = service.status === 'running'
   // 会话背景（需求五）：仅对话区域容器
@@ -94,7 +130,12 @@ export function DSHCore(): JSX.Element {
         {running && dshUrl ? (
           <webview
             ref={(el) => {
-              webviewRef.current = (el as Electron.WebviewTag | null) ?? null
+              const wv = (el as Electron.WebviewTag | null) ?? null
+              webviewRef.current = wv
+              if (wv) {
+                wv.removeEventListener('did-finish-load', injectHideOnboarding)
+                wv.addEventListener('did-finish-load', injectHideOnboarding)
+              }
             }}
             src={dshUrl}
             className="h-full w-full"

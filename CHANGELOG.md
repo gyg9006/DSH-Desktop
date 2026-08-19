@@ -4,6 +4,19 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.9] - 2026-08-19
+
+### 新增
+
+- **设置 → 通用 → 「重新体验引导」**：一键重置引导状态并重启，重新进入三步引导（工作文件夹 / 环境检测 / API Key），已保存配置与数据不受影响；
+- **dsh 对话页模型选择器始终可用**：`syncModelsConfigToDsh` 在用户未配置任何厂商时默认写入 `llm-deepseek` 预设模型（deepseek-chat / deepseek-reasoner），无需先填 Key 即可看到并选择模型；
+- **dsh 不再弹 API Key 输入引导**：dsh 界面加载后注入脚本隐藏 onboarding / API Key 引导类弹窗（Key 统一在客户端「设置 → 模型与 API」配置），主路径是 settings.yaml 已写入模型预设使 dsh 不进入「未配置」引导态。
+
+### 使用
+
+- 首次打开（onboarded 未完成）显示三步引导；已完成的用户可在「设置 → 通用 → 重新体验引导」再次进入；
+- 所有厂商 API Key 均在「设置 → 模型与 API」配置，保存即同步 dsh（模型选择器立即可选、不再弹 Key 引导）。
+
 ## [2.1.8] - 2026-08-19
 
 ### 修复

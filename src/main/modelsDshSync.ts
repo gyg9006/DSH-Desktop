@@ -48,6 +48,20 @@ export function syncModelsConfigToDsh(workspaceDir: string): { ok: boolean; erro
     const file = settingsFile(workspaceDir)
     const existing = loadYamlObject(fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '') ?? {}
 
+    // 默认模型保障：用户从未配置任何厂商时，也写入 llm-deepseek 预设，
+    // 保证 dsh 对话页模型选择器始终有可选模型（无需先填 Key）。
+    const hasAnyProvider = Object.values(cfg.providers).some((p) => p.enabled) || Object.values(cfg.customProviders).some((c) => c.enabled)
+    if (!hasAnyProvider) {
+      const dsPresetDef = PROVIDER_PRESETS.find((p) => p.id === 'deepseek')
+      if (dsPresetDef && !(existing['llm-deepseek'] && typeof existing['llm-deepseek'] === 'object')) {
+        existing['llm-deepseek'] = {
+          baseURL: dsPresetDef.baseUrl,
+          apiKeyEnv: DEEPSEEK_API_KEY_ENV,
+          models: dsPresetDef.defaultModels.map((m) => ({ id: m }))
+        }
+      }
+    }
+
     // ---- llm-deepseek 段：官方提供方（含 models 目录） ----
     const ds = cfg.providers['deepseek']
     const dsPreset = PROVIDER_PRESETS.find((p) => p.id === 'deepseek')

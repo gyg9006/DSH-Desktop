@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { JSX } from 'react'
-import { Languages, Bot, HardDrive, FolderOpen, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { Languages, Bot, HardDrive, FolderOpen, Loader2, CheckCircle2, XCircle, Compass } from 'lucide-react'
 import type { DshUiSettingsResult, RelocateEventPayload } from '@shared/ipc'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card'
 import { Button } from '../../ui/button'
@@ -58,6 +58,20 @@ export function GeneralSection(): JSX.Element {
     }
   }
 
+  /** 重置引导状态并重启，重新进入首次引导（数据与配置保留）。 */
+  const restartOnboarding = async (): Promise<void> => {
+    if (!confirm('重新体验首次引导？\n\n将重置引导状态并重启应用，进入三步引导（工作文件夹 / 环境检测 / API Key）。已保存的配置与数据不受影响。')) return
+    const r = await window.dshw.updateConfig({ onboarded: false })
+    if (!r.ok) {
+      toast(r.error ?? '重置引导状态失败', 'error')
+      return
+    }
+    toast('已重置引导状态，正在重启…', 'info')
+    window.setTimeout(() => {
+      void window.dshw.relaunchApp().catch(() => undefined)
+    }, 1500)
+  }
+
   return (
     <div className="max-w-2xl space-y-4">
       {/* 工作文件夹 */}
@@ -100,6 +114,12 @@ export function GeneralSection(): JSX.Element {
           <p className="text-[11px] leading-relaxed text-cyber-faint">
             迁移为原子操作：复制 → 完整性校验 → 切换配置 → 旧目录改名保留（*.old）；任一步失败自动回滚，原数据不受影响。运行时环境（runtime/）不随迁移，迁移后重新一键安装即可。
           </p>
+          <div className="flex items-center gap-2 border-t border-cyber-border pt-3">
+            <Button size="sm" variant="outline" onClick={() => void restartOnboarding()}>
+              <Compass className="h-3.5 w-3.5" /> 重新体验引导
+            </Button>
+            <span className="text-[10px] text-cyber-faint">重置引导状态并重启，进入三步引导（工作文件夹 / 环境 / API Key）。</span>
+          </div>
         </CardContent>
       </Card>
 

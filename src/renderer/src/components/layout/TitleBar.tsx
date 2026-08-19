@@ -31,7 +31,7 @@ export function TitleBar(): JSX.Element {
           D
         </span>
         <span className="text-xs font-semibold tracking-widest text-cyber-text">
-          DSH <span className="neon-text">桌面</span>
+          DSH-Desktop
         </span>
         <span className="ml-1 rounded border border-cyber-border px-1 py-px text-[9px] text-cyber-faint">
           v{getAppVersion()}

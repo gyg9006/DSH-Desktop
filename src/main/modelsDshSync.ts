@@ -51,7 +51,8 @@ export function syncModelsConfigToDsh(workspaceDir: string): { ok: boolean; erro
     // 默认模型保障：用户从未配置任何厂商时，也写入 llm-deepseek 预设，
     // 保证 dsh 对话页模型选择器始终有可选模型（无需先填 Key）。
     const hasAnyProvider = Object.values(cfg.providers).some((p) => p.enabled) || Object.values(cfg.customProviders).some((c) => c.enabled)
-    if (!hasAnyProvider) {
+    const hasConfiguredProvider = Object.keys(cfg.providers).length > 0 || Object.keys(cfg.customProviders).length > 0
+    if (!hasConfiguredProvider) {
       const dsPresetDef = PROVIDER_PRESETS.find((p) => p.id === 'deepseek')
       if (dsPresetDef && !(existing['llm-deepseek'] && typeof existing['llm-deepseek'] === 'object')) {
         existing['llm-deepseek'] = {
@@ -89,8 +90,8 @@ export function syncModelsConfigToDsh(workspaceDir: string): { ok: boolean; erro
         section.models = dsModels
       }
       existing['llm-deepseek'] = section
-    } else if (hasAnyProvider) {
-      // 用户明确存在其它厂商配置且 DeepSeek 未启用时才移除；
+    } else if (hasConfiguredProvider) {
+      // 只要用户曾明确配置过厂商，禁用 DeepSeek 就应移除对应段；
       // 完全未配置时保留上方默认 DeepSeek 模型，保证选择器不为空。
       delete existing['llm-deepseek']
     }

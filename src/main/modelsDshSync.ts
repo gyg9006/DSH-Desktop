@@ -50,7 +50,6 @@ export function syncModelsConfigToDsh(workspaceDir: string): { ok: boolean; erro
 
     // 默认模型保障：用户从未配置任何厂商时，也写入 llm-deepseek 预设，
     // 保证 dsh 对话页模型选择器始终有可选模型（无需先填 Key）。
-    const hasAnyProvider = Object.values(cfg.providers).some((p) => p.enabled) || Object.values(cfg.customProviders).some((c) => c.enabled)
     const hasConfiguredProvider = Object.keys(cfg.providers).length > 0 || Object.keys(cfg.customProviders).length > 0
     if (!hasConfiguredProvider) {
       const dsPresetDef = PROVIDER_PRESETS.find((p) => p.id === 'deepseek')

@@ -204,6 +204,7 @@ function Tip({ text, children }: { text: string; children: React.ReactNode }): J
 }
 
 function ServiceCard(): JSX.Element {
+  const { toast } = useToast()
   const [portMode, setPortMode] = useState<'auto' | 'fixed'>('auto')
   const [port, setPort] = useState('3080')
   const [autoStart, setAutoStart] = useState(false)
@@ -219,14 +220,23 @@ function ServiceCard(): JSX.Element {
     })
   }, [])
 
-  // 端口模式保存：显式传 mode/port（避免 setState 异步导致闭包读到旧值而保存失效）
+  // 端口模式保存：显式传 mode/port，并在服务运行时自动重启使监听端口立即生效。
   const savePort = async (mode: 'auto' | 'fixed', p?: string): Promise<void> => {
-    await window.dshw.updateConfig({
-      service: {
-        portMode: mode,
-        port: mode === 'fixed' ? Number(p ?? port) || 3080 : undefined
-      }
-    })
+    const nextPort = mode === 'fixed' ? Number(p ?? port) || 3080 : undefined
+    const saved = await window.dshw.updateConfig({ service: { portMode: mode, port: nextPort } })
+    if (!saved.ok) {
+      toast(saved.error ?? '端口配置保存失败', 'error')
+      return
+    }
+    const status = await window.dshw.getServiceStatus()
+    if (status.status === 'running' || status.status === 'starting') {
+      toast('端口配置已保存，正在重启服务使其生效…', 'info')
+      await window.dshw.stopService()
+      const restarted = await window.dshw.startService()
+      if (!restarted.ok) toast(restarted.error ?? '服务重启失败', 'error')
+    } else {
+      toast('端口配置已保存', 'success')
+    }
   }
 
   const saveAutoStart = async (enabled: boolean): Promise<void> => {

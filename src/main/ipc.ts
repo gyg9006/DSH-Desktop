@@ -20,10 +20,7 @@ import type {
   KnowledgeSearchQuery,
   KnowledgeExtractInput,
   KnowledgePipelineInput,
-  AgentCollaborateInput,
-  ModelsProviderSetInput,
-  ModelsCustomUpsertInput,
-  ModelsTestInput
+  AgentCollaborateInput
 } from '../shared/ipc'
 import { logger } from './logger'
 import { getWorkspaceDir, getRootDir, readAppConfig, updateAppConfig } from './config'
@@ -96,10 +93,6 @@ import { readAppLog, readDshLog, clearLogs, exportLogsZip } from './logs'
 import { getKnowledge, createKnowledgeCategory, renameKnowledgeCategory, deleteKnowledgeCategory, createKnowledgeEntry, updateKnowledgeEntry, deleteKnowledgeEntry, searchKnowledge, extractKnowledgeToStore, iterateKnowledge } from './knowledge'
 import { runExtractionPipeline, readRecentSessionText } from './skillOrchestrator'
 import { ensureGlobalRules, getRulesFilePath, saveGlobalRules } from './rules'
-import { getAllProviders, updateProviderConfig, updateCustomProvider, deleteCustomProvider, migrateLegacyApiConfig, readModelsConfig, writeModelsConfig, PROVIDER_PRESETS } from './provider-registry'
-import { saveApiKeySecure, readApiKeySecure, deleteApiKeySecure, maskKey } from './secure-storage'
-import { testAdapterConnection, listModelsFor } from './adapters'
-import { syncModelsConfigToDsh, syncKeysToCredentials } from './modelsDshSync'
 import { listThemes, getActiveTheme, setActiveTheme } from './theme'
 import { refreshTrayTheme } from './tray'
 import { listAgents, importAgent, renameAgent, deleteAgent, runAgent, collaborateAgents } from './agents'
@@ -902,99 +895,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.RulesSave, (_event, content: string) =>
     saveGlobalRules(getWorkspaceDir(), String(content ?? ''))
   )
-
-  // ===== v2.0：全域模型对接中心 =====
-  ipcMain.handle(IPC.ModelsGet, () => {
-    const view = getAllProviders(getWorkspaceDir())
-    const keyMasks: Record<string, string> = {}
-    for (const p of view.presets) {
-      const key = readApiKeySecure(getWorkspaceDir(), p.id)
-      if (key) keyMasks[p.id] = maskKey(key)
-    }
-    for (const c of view.custom) {
-      const key = readApiKeySecure(getWorkspaceDir(), c.id)
-      if (key) keyMasks[c.id] = maskKey(key)
-    }
-    return { ...view, keyMasks }
-  })
-  ipcMain.handle(IPC.ModelsProviderSet, (_event, input: ModelsProviderSetInput) => {
-    try {
-      updateProviderConfig(getWorkspaceDir(), String(input?.providerId ?? ''), input?.patch ?? {})
-      syncModelsConfigToDsh(getWorkspaceDir())
-      return { ok: true }
-    } catch (error) {
-      return { ok: false, error: String(error) }
-    }
-  })
-  ipcMain.handle(IPC.ModelsCustomUpsert, (_event, input: ModelsCustomUpsertInput) => {
-    try {
-      updateCustomProvider(getWorkspaceDir(), input)
-      syncModelsConfigToDsh(getWorkspaceDir())
-      return { ok: true }
-    } catch (error) {
-      return { ok: false, error: String(error) }
-    }
-  })
-  ipcMain.handle(IPC.ModelsCustomDelete, (_event, id: string) => {
-    try {
-      deleteCustomProvider(getWorkspaceDir(), String(id))
-      deleteApiKeySecure(getWorkspaceDir(), String(id))
-      syncModelsConfigToDsh(getWorkspaceDir())
-      return { ok: true }
-    } catch (error) {
-      return { ok: false, error: String(error) }
-    }
-  })
-  ipcMain.handle(IPC.ModelsKeySave, (_event, providerId: string, key: string) => {
-    const id = String(providerId ?? '')
-    if (!id) return { ok: false, error: '缺少厂商 id' }
-    saveApiKeySecure(getWorkspaceDir(), id, String(key ?? ''))
-    // 保存 Key 时自动启用该厂商并补齐默认模型（models.json）：
-    // 否则 llm-deepseek/llm-pi-ai 段不写 → dsh 模型选择器为空 + 凭据不同步 → dsh 反复提示输入 API Key
-    try {
-      const cfg = readModelsConfig(getWorkspaceDir())
-      const preset = PROVIDER_PRESETS.find((p) => p.id === id)
-      const cur = cfg.providers[id] ?? { enabled: false, models: [] }
-      cfg.providers[id] = {
-        ...cur,
-        enabled: true,
-        models: Array.isArray(cur.models) && cur.models.length > 0 ? cur.models : (preset?.defaultModels ?? [])
-      }
-      writeModelsConfig(getWorkspaceDir(), cfg)
-    } catch (error) {
-      return { ok: false, error: `厂商配置保存失败：${String(error)}` }
-    }
-    syncModelsConfigToDsh(getWorkspaceDir())
-    syncKeysToCredentials(getWorkspaceDir())
-    const plain = readApiKeySecure(getWorkspaceDir(), id)
-    return { ok: true, mask: plain ? maskKey(plain) : '' }
-  })
-  ipcMain.handle(IPC.ModelsKeyDelete, (_event, providerId: string) => {
-    deleteApiKeySecure(getWorkspaceDir(), String(providerId ?? ''))
-    syncModelsConfigToDsh(getWorkspaceDir())
-    syncKeysToCredentials(getWorkspaceDir())
-    return { ok: true }
-  })
-  ipcMain.handle(IPC.ModelsTest, async (_event, input: ModelsTestInput) => {
-    const id = String(input?.providerId ?? '')
-    const key = id ? readApiKeySecure(getWorkspaceDir(), id) : undefined
-    return testAdapterConnection(input?.protocol ?? 'openai', String(input?.baseUrl ?? ''), key, input?.model)
-  })
-  ipcMain.handle(IPC.ModelsList, async (_event, input: ModelsTestInput) => {
-    const id = String(input?.providerId ?? '')
-    const key = id ? readApiKeySecure(getWorkspaceDir(), id) : undefined
-    return listModelsFor(input?.protocol ?? 'openai', String(input?.baseUrl ?? ''), key)
-  })
-  ipcMain.handle(IPC.ModelsMigrateLegacy, () => {
-    try {
-      const legacy = readApiConfig()
-      migrateLegacyApiConfig(getWorkspaceDir(), legacy.apiKey, (id, k) => saveApiKeySecure(getWorkspaceDir(), id, k))
-      syncModelsConfigToDsh(getWorkspaceDir())
-      return { ok: true }
-    } catch (error) {
-      return { ok: false, error: String(error) }
-    }
-  })
 
   // ===== v2.0：主题全局化 =====
   ipcMain.handle(IPC.ThemeList, () => listThemes(getWorkspaceDir()))

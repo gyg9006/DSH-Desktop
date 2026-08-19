@@ -19,11 +19,8 @@ import type { ExtractStepKey, KnowledgeCategory } from '@shared/ipc'
  * - 会话导入（文件夹 / 文件）；
  * - 「提炼会话」：一键智能提炼流水线（SkillOrchestrator 六步编排，进度实时展示）。
  *
- * API Key 引导屏蔽：dsh 的 API Key / onboarding 弹窗由客户端「设置 → 模型与 API」统一管理，
- * 这里在 dsh 界面加载后注入 JS 隐藏引导类弹窗/遮罩（兜底；主路径是 settings.yaml 已写入
- * llm-deepseek 预设模型，dsh 不再进入「未配置」引导态）。
- */
-/** DSH Web 是唯一的模型、Key、会话和消息实现；宿主不注入或改写其 DOM。 */
+ * DSH Web 是唯一的模型、Key、会话和消息实现；宿主只负责生命周期和原生 webview 容器，
+ * 不注入、不改写 DSH 页面 DOM。 */
 
 export function DSHCore(): JSX.Element {
   const { toast } = useToast()

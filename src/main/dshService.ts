@@ -42,7 +42,8 @@ interface ServiceConfig {
   autoStart?: boolean
 }
 
-const HEALTH_INTERVAL_MS = 5000
+// C13：客户端每 30 秒探活 DSH，进程异常退出仍由 exit 事件立即标记 error。
+const HEALTH_INTERVAL_MS = 30000
 const STOP_GRACE_MS = 3000
 const DEFAULT_STARTUP_TIMEOUT_MS = 60000
 const MAX_LOG_LINES = 300

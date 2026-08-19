@@ -138,9 +138,9 @@ export function DSHCore(): JSX.Element {
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3">
             <div className="text-3xl">🛰️</div>
-            <div className="text-sm text-cyber-text">服务未启动</div>
+            <div className="text-sm text-cyber-text">{service.status === 'error' ? 'DSH 服务异常' : '服务未启动'}</div>
             <p className="max-w-sm text-center text-xs leading-relaxed text-cyber-dim">
-              dsh 服务停止时无法加载对话界面。点击底部状态栏「启动服务」，启动后自动加载 DSH Web 工作台。
+              {service.status === 'error' ? 'DSH 服务已异常退出，请检查日志后重试。' : 'DSH 服务停止时无法加载对话界面。点击下方按钮启动完整 DSH 工作台。'}
             </p>
             <Button
               size="sm"

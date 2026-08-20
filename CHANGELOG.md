@@ -4,6 +4,14 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.2.1] - 2026-08-20
+
+### 环境与更新修复
+
+- DSH 强制使用 `--no-open`，服务启动不再打开外部浏览器；
+- 更新检查改为启动一次 + 手动检查，缓存 24 小时，当前版本相等或网络失败不提示；
+- 增加工作区 `env/install-status.json` 和 env PATH 注入框架，安装失败明确记录，不静默跳过。
+
 ## [2.2.0] - 2026-08-19
 
 ### 架构还原

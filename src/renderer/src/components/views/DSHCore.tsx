@@ -147,20 +147,28 @@ export function DSHCore(): JSX.Element {
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3">
-            <div className="text-3xl">🛰️</div>
-            <div className="text-sm text-cyber-text">{service.status === 'error' ? 'DSH 服务异常' : '服务未启动'}</div>
+            <div className="text-3xl">{service.status === 'starting' ? <Loader2 className="h-8 w-8 animate-spin text-cyber-neon" /> : '🛰️'}</div>
+            <div className="text-sm text-cyber-text">
+              {service.status === 'error' ? 'DSH 服务异常' : service.status === 'starting' ? 'DSH 服务启动中…' : '服务未启动'}
+            </div>
             <p className="max-w-sm text-center text-xs leading-relaxed text-cyber-dim">
-              {service.status === 'error' ? 'DSH 服务已异常退出，请检查日志后重试。' : 'DSH 服务停止时无法加载对话界面。点击下方按钮启动完整 DSH 工作台。'}
+              {service.status === 'error'
+                ? 'DSH 服务已异常退出，请查看日志后重试。'
+                : service.status === 'starting'
+                  ? '正在启动 DSH 服务；首次使用需安装运行依赖，请稍候。'
+                  : 'DSH 服务停止时无法加载对话界面。点击下方按钮启动完整 DSH 工作台。'}
             </p>
-            <Button
-              size="sm"
-              variant="default"
-              disabled={service.busy}
-              onClick={() => void service.start()}
-            >
-              {service.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              启动服务
-            </Button>
+            {service.status !== 'starting' && (
+              <Button
+                size="sm"
+                variant="default"
+                disabled={service.busy}
+                onClick={() => void service.start()}
+              >
+                {service.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                启动服务
+              </Button>
+            )}
           </div>
         )}
         {running && dshUrl && !webviewReady && (

@@ -158,6 +158,8 @@ async function cleanupRuntimeNode(workspaceDir: string): Promise<number> {
 /**
  * 检测工作区 dsh 安装是否损坏（历史 symlink 安装无依赖 / 依赖缺失）。
  * 损坏时启动服务会自动清理重装（复制 + 包内 npm install）。
+ * 核心检查：bin.js 直接依赖 @deepseek-ai/dsh-app-boot 必须可解析
+ * （此前只抽查前 3 个依赖，网络中断的安装会留下「主包在、依赖空」的假完整状态）。
  */
 export function dshInstallBroken(workspaceDir: string): boolean {
   const pkgDir = path.join(workspaceDir, 'runtime', 'dsh', 'node_modules', '@deepseek-ai', 'dsh')
@@ -170,14 +172,13 @@ export function dshInstallBroken(workspaceDir: string): boolean {
     return false // 目录不存在 → 未安装（走自动启用分支）
   }
   if (!fs.existsSync(pkgPath)) return false
+  // bin.js 首行 import 的启动必需依赖；缺失则 dsh 秒退（ERR_MODULE_NOT_FOUND）
+  const critical = '@deepseek-ai/dsh-app-boot'
+  if (!resolveDependency(pkgDir, critical)) return true
   try {
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { dependencies?: Record<string, string> }
     const deps = Object.keys(pkg.dependencies ?? {})
     if (deps.length === 0) return true
-    // 抽查前 3 个依赖能否从包目录解析（bin.js 启动必用，如 @deepseek-ai/dsh-app-boot）
-    for (const d of deps.slice(0, 3)) {
-      if (!resolveDependency(pkgDir, d)) return true
-    }
   } catch {
     return true
   }
@@ -370,13 +371,20 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
       dshBin = null
     }
     if (!dshBin && bundledToolPath('dsh')) {
-      // 内置 dsh 可用但未安装到工作区 → 自动启用（内置主包 + 依赖安装，免手动一键安装）
-      pushLog('检测到内置 dsh，正在自动启用（免手动安装）…')
+      // 内置 dsh 可用但未安装到工作区 → 自动启用（内置主包 + 依赖安装，免手动一键安装）。
+      // 依赖安装需联网下载（约 1-3 分钟），先进入 starting 状态给用户明确进度反馈，
+      // 避免 UI 停留在「已停止」且 60 秒启动超时误报。
+      status = 'starting'
+      currentPort = null
+      emit()
+      pushLog('检测到内置 dsh，正在自动启用：安装依赖需要联网下载，首次约 1-3 分钟，请稍候…')
       const inst = await runInstall(workspaceDir, 'dsh', 'install', {
         log: (m) => pushLog(m),
         progress: () => undefined
       })
       if (!inst.ok) {
+        status = 'stopped'
+        emit()
         return { ok: false, error: `内置 dsh 自动启用失败：${inst.error ?? '未知错误'}（可稍后在「设置 → 环境检测」中手动重试）` }
       }
       dshBin = resolveDshBin(workspaceDir)

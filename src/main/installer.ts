@@ -811,6 +811,37 @@ export function findGitRoot(staging: string): string | null {
   return null
 }
 
+/**
+ * npm install 带失败重试（网络慢/下载中断场景常见：如 esbuild 平台二进制下载超时）。
+ * 最多尝试 3 次，每次失败后等待 2 秒；取消信号立即终止。
+ */
+async function runNpmInstallWithRetry(
+  opts: { command: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv; signal: AbortSignal; label: string },
+  cbs: InstallCallbacks
+): Promise<void> {
+  const maxAttempts = 3
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (opts.signal.aborted) throw new InstallCancelledError()
+    if (attempt > 1) cbs.log(`${opts.label}依赖下载失败，第 ${attempt}/${maxAttempts} 次重试…`)
+    const result = await runCommand({
+      command: opts.command,
+      args: opts.args,
+      cwd: opts.cwd,
+      env: opts.env,
+      timeoutMs: INSTALL_TIMEOUT_MS,
+      signal: opts.signal,
+      onStdout: (chunk) => cbs.log(chunk.trim())
+    })
+    if (result.aborted) throw new InstallCancelledError()
+    if (!result.error) return
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      continue
+    }
+    throw new InstallError(`${opts.label}失败（已重试 ${maxAttempts} 次）：${result.error}`)
+  }
+}
+
 async function installDsh(
   workspaceDir: string,
   mode: InstallMode,
@@ -826,7 +857,7 @@ async function installDsh(
   if (bundledDsh?.dirPath) {
     // 新形态：内置 dsh-cli 解压目录 → 复制到工作区后在其内部 npm install（解析 dependencies）
     // 注意：npm install <本地目录> --prefix 是 file:link 语义不装依赖，必须在包内执行 install
-    cbs.log(`使用内置便携环境：dsh ${bundledDsh.version}（免下载主包，安装依赖中…）`)
+    cbs.log(`使用内置便携环境：dsh ${bundledDsh.version}（免下载主包，安装依赖中，首次需联网下载约 1-3 分钟）…`)
     if (!fs.existsSync(path.join(bundledDsh.dirPath, 'package.json'))) {
       throw new InstallError('内置 dsh 包缺少 package.json')
     }
@@ -835,17 +866,7 @@ async function installDsh(
     if (fs.existsSync(target)) safeRemoveDir(target)
     fs.cpSync(bundledDsh.dirPath, target, { recursive: true })
     const { command, args } = npmCliArgs(nodeDir, ['install', '--no-audit', '--no-fund'])
-    const result = await runCommand({
-      command,
-      args,
-      cwd: target,
-      env: buildInstallEnv(workspaceDir),
-      timeoutMs: INSTALL_TIMEOUT_MS,
-      signal,
-      onStdout: (chunk) => cbs.log(chunk.trim())
-    })
-    if (result.aborted) throw new InstallCancelledError()
-    if (result.error) throw new InstallError(`dsh ${action}失败：${result.error}`)
+    await runNpmInstallWithRetry({ command, args, cwd: target, env: buildInstallEnv(workspaceDir), signal, label: `dsh ${action}` }, cbs)
   } else if (bundledDsh) {
     // 旧形态：内置 dsh tgz → npm install --prefix
     cbs.log(`使用内置便携环境：dsh ${bundledDsh.version}（免下载）`)
@@ -854,33 +875,13 @@ async function installDsh(
     }
     fs.mkdirSync(dshDir, { recursive: true })
     const { command, args } = npmCliArgs(nodeDir, ['install', bundledDsh.archivePath!, '--prefix', dshDir, '--no-audit', '--no-fund'])
-    const result = await runCommand({
-      command,
-      args,
-      cwd: dshDir,
-      env: buildInstallEnv(workspaceDir),
-      timeoutMs: INSTALL_TIMEOUT_MS,
-      signal,
-      onStdout: (chunk) => cbs.log(chunk.trim())
-    })
-    if (result.aborted) throw new InstallCancelledError()
-    if (result.error) throw new InstallError(`dsh ${action}失败：${result.error}`)
+    await runNpmInstallWithRetry({ command, args, cwd: dshDir, env: buildInstallEnv(workspaceDir), signal, label: `dsh ${action}` }, cbs)
   } else {
     const pkg = '@deepseek-ai/dsh' + (mode === 'update' ? '@latest' : '')
-    cbs.log(`开始${action} DeepSeek Harness（npm install ${pkg}）…`)
+    cbs.log(`开始${action} DeepSeek Harness（npm install ${pkg}，首次需联网下载约 1-3 分钟）…`)
     fs.mkdirSync(dshDir, { recursive: true })
     const { command, args } = npmCliArgs(nodeDir, ['install', pkg, '--prefix', dshDir, '--no-audit', '--no-fund'])
-    const result = await runCommand({
-      command,
-      args,
-      cwd: dshDir,
-      env: buildInstallEnv(workspaceDir),
-      timeoutMs: INSTALL_TIMEOUT_MS,
-      signal,
-      onStdout: (chunk) => cbs.log(chunk.trim())
-    })
-    if (result.aborted) throw new InstallCancelledError()
-    if (result.error) throw new InstallError(`dsh ${action}失败：${result.error}`)
+    await runNpmInstallWithRetry({ command, args, cwd: dshDir, env: buildInstallEnv(workspaceDir), signal, label: `dsh ${action}` }, cbs)
   }
 
   let version: string | null = null

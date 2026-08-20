@@ -10,8 +10,7 @@
  *
  * 更新设置存于 workspace/config/app.json 的 updater 键：
  *   { mode: 'auto' | 'manual', lastCheckAt?: number, lastVersion?: string }
- * auto 模式：主进程定时检查（启动 10 秒后 + 每 6 小时），发现新版本自动下载，
- * 下载完成后经 update 事件提示用户重启应用完成更新。
+ * auto 模式：仅在启动后检查一次；设置页可手动强制检查，网络失败静默忽略。
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -190,8 +189,8 @@ export async function checkForUpdate(opts: {
   const fetchImpl = opts.fetchImpl ?? fetch
   const settings = readUpdateSettings(ws)
   const now = Date.now()
-  // 非强制且 10 分钟内刚检查过 → 直接复用上次结果（避免高频请求 GitHub API 限流）
-  if (!force && settings.lastCheckAt && now - settings.lastCheckAt < 10 * 60 * 1000) {
+  // 非强制且 24 小时内刚检查过 → 直接复用上次结果，避免重复请求和更新误报。
+  if (!force && settings.lastCheckAt && now - settings.lastCheckAt < 24 * 60 * 60 * 1000) {
     return {
       ok: true,
       current,
@@ -537,37 +536,34 @@ function spawnSyncUnzip(zipPath: string, dest: string): boolean {
 // 自动更新调度
 // ---------------------------------------------------------------------------
 
-/** 自动检查间隔：6 小时。 */
-export const AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
-
-/** 启动后首次检查延迟：10 秒。 */
+/** 启动后首次检查延迟：10 秒；不再周期性触发，避免更新误报和重复打扰。 */
 export const AUTO_CHECK_DELAY_MS = 10 * 1000
 
 let autoTimer: NodeJS.Timeout | null = null
 
-/** 自动模式：定时检查；发现新版本仅广播「found」，由 UI 决定下载（立即更新/稍后提醒/查看日志）。 */
+/** 自动模式：只在启动后检查一次；24 小时缓存由 checkForUpdate 控制。 */
 export function scheduleAutoUpdate(): void {
-  if (autoTimer) clearInterval(autoTimer)
+  stopAutoUpdateSchedule()
   const run = (): void => {
     const settings = readUpdateSettings()
     if (settings.mode !== 'auto') return
     void (async () => {
       const result = await checkForUpdate()
       if (!result.ok || !result.hasUpdate || !result.latest) return
-      // 已提示过该版本（lastVersion）或被「稍后提醒」忽略（dismissedVersion）→ 不重复打扰
       const done = readUpdateSettings()
-      if (done.lastVersion === result.latest || done.dismissedVersion === result.latest) return
-      writeUpdateSettings({ lastVersion: result.latest })
+      if (done.dismissedVersion === result.latest) return
       emit({ phase: 'found', version: result.latest, message: `发现新版本 v${result.latest}` })
     })()
   }
-  setTimeout(run, AUTO_CHECK_DELAY_MS)
-  autoTimer = setInterval(run, AUTO_CHECK_INTERVAL_MS)
+  autoTimer = setTimeout(() => {
+    autoTimer = null
+    run()
+  }, AUTO_CHECK_DELAY_MS)
 }
 
 export function stopAutoUpdateSchedule(): void {
   if (autoTimer) {
-    clearInterval(autoTimer)
+    clearTimeout(autoTimer)
     autoTimer = null
   }
 }

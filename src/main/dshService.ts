@@ -447,7 +447,8 @@ export async function startDshService(): Promise<{ ok: boolean; port?: number; e
   // 启动参数（规格 6.11：默认 web，可追加）与 Node 选择（规格 6.15 + 内置/工作区/系统三级）
   const extraArgs = Array.isArray(svc.extraArgs) && svc.extraArgs.length > 0 ? svc.extraArgs : ['web']
   const runner = nodeRunner
-  const launchArgs = [dshBin, ...extraArgs, '--port', String(port)]
+  // DSH 必须嵌入客户端 webview，禁止 dsh 自动打开系统浏览器。
+  const launchArgs = [dshBin, ...extraArgs.filter((arg) => arg !== '--open' && arg !== '--no-open'), '--no-open', '--port', String(port)]
   pushLog(`启动命令：${runner} ${launchArgs.join(' ')}`)
 
   child = spawn(runner, launchArgs, {

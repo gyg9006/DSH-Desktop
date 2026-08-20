@@ -14,6 +14,7 @@ import { runCommand } from './utils/process'
 import { buildRuntimeEnv } from './envCheck'
 import { portableEnvDir, readEnvManifest } from './env-resolver'
 import type { InstallKey, InstallMode } from '../shared/ipc'
+import { readInstallStatus, writeInstallStatus } from './envInstallerManifest'
 
 // 兼容旧 import（env-resolver 为权威实现）
 export { portableEnvDir, readEnvManifest }
@@ -926,12 +927,21 @@ export async function runInstall(
   try {
     cbs.log(`任务开始：${INSTALL_KEY_LABELS[key]}（${mode === 'update' ? '更新' : '安装'}）`)
     await installers[key](workspaceDir, mode, cbs, controller.signal)
+    const current = readInstallStatus(workspaceDir) ?? { version: 1 as const, updatedAt: new Date().toISOString(), items: {} }
+    current.updatedAt = new Date().toISOString()
+    current.items[key] = { state: 'installed', source: 'bundled-installer' }
+    writeInstallStatus(workspaceDir, current)
     return { ok: true }
   } catch (error) {
     if (error instanceof InstallCancelledError || controller.signal.aborted) {
       return { ok: false, cancelled: true }
     }
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    const message = error instanceof Error ? error.message : String(error)
+    const current = readInstallStatus(workspaceDir) ?? { version: 1 as const, updatedAt: new Date().toISOString(), items: {} }
+    current.updatedAt = new Date().toISOString()
+    current.items[key] = { state: 'failed', source: 'bundled-installer', error: message }
+    writeInstallStatus(workspaceDir, current)
+    return { ok: false, error: message }
   } finally {
     currentController = null
   }

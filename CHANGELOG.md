@@ -4,6 +4,14 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.2.2] - 2026-08-20
+
+### 浏览器自动打开修复
+
+- DSH 启动强制使用 `--no-open`；
+- webview 阻止 `new-window` 和非 localhost 导航，DSH 仅在客户端核心工作台内显示；
+- 保留手动访问 localhost 服务地址的能力。
+
 ## [2.2.1] - 2026-08-20
 
 ### 环境与更新修复

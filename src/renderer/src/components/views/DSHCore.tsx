@@ -53,6 +53,15 @@ export function DSHCore(): JSX.Element {
     setWebviewTimedOut(false)
   }, [])
 
+  // DSH 完整服务只能在客户端 webview 内运行；阻止 window.open/new-window 和跨源导航。
+  const blockExternalWindow = useCallback((event: Event): void => {
+    event.preventDefault()
+  }, [])
+  const blockExternalNavigation = useCallback((event: Event): void => {
+    const url = (event as Event & { url?: string }).url ?? ''
+    if (url && !/^http:\/\/localhost(?::\d+)?(?:\/|$)/i.test(url)) event.preventDefault()
+  }, [])
+
   useEffect(() => {
     if (autoStartAttempted.current || service.status !== 'stopped') return
     autoStartAttempted.current = true
@@ -125,6 +134,10 @@ export function DSHCore(): JSX.Element {
               if (wv) {
                 wv.removeEventListener('did-finish-load', onWebviewReady)
                 wv.addEventListener('did-finish-load', onWebviewReady)
+                wv.removeEventListener('new-window', blockExternalWindow)
+                wv.addEventListener('new-window', blockExternalWindow)
+                wv.removeEventListener('will-navigate', blockExternalNavigation)
+                wv.addEventListener('will-navigate', blockExternalNavigation)
               }
             }}
             src={dshUrl}

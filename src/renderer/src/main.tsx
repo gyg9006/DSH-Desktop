@@ -83,8 +83,9 @@ function Boot(): JSX.Element {
         document.title = `DSH-Desktop v${currentVersion}`
         if (alive) {
           setAppVersion(currentVersion)
-          // 旧版 onboarded 不足以跳过新版本引导；每个版本首次打开展示一次。
-          setOnboarded(config?.onboarded === true && config?.onboardingVersion === currentVersion)
+          // 引导完成标记（onboarded）一旦写入即永久跳过引导，升级版本也不重新弹出
+          // （不再要求 onboardingVersion 匹配当前版本；该字段缺失会导致引导页每次启动都出现）。
+          setOnboarded(config?.onboarded === true)
         }
       } catch {
         if (alive) {

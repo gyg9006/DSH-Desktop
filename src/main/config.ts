@@ -49,6 +49,7 @@ const CONFIG_WRITE_WHITELIST: ReadonlySet<string> = new Set([
   'theme',
   'sidebarCollapsed',
   'onboarded',
+  'onboardingVersion',
   'workspacePath',
   'service',
   'backup',

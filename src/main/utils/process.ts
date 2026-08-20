@@ -237,6 +237,11 @@ export function buildChildEnv(
   const env: NodeJS.ProcessEnv = { ...process.env }
   const pathKey = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'Path'
   const candidates = [
+    // 新布局：完整安装器落到工作区 env/；旧 runtime 作为兼容回退。
+    path.join(workspaceDir, 'env', 'node'),
+    path.join(workspaceDir, 'env', 'pnpm'),
+    path.join(workspaceDir, 'env', 'git', 'cmd'),
+    path.join(workspaceDir, 'env', 'git', 'bin'),
     path.join(workspaceDir, 'runtime', 'node'),
     path.join(workspaceDir, 'runtime', 'git', 'cmd'),
     ...extraPathDirs

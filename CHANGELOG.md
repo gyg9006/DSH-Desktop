@@ -4,6 +4,15 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.2.3] - 2026-08-21
+
+### 开箱即用与引导修复
+
+- **dsh 依赖随包预装**：打包时将 dsh 全部依赖（含 devDependencies）预装进 `resources/portable-env/dsh-cli/node_modules`，用户解压后 dsh 秒启、无需联网安装，彻底修复依赖缺失导致的「每次启动触发重装/服务超时」；
+- **构建校验增强**：`verify-build` 新增 dsh-cli 依赖预装完整性校验（`@deepseek-ai/dsh-app-boot` 必须存在），依赖缺失直接构建失败，不再带病发布；
+- **引导标记持久化**：`onboarded` 一旦写入即永久跳过引导，升级版本不再重复弹出（修复 `onboardingVersion` 字段缺失导致引导页每次启动都出现的问题），同时白名单补 `onboardingVersion`；
+- **dsh 启动失败兜底增强**：依赖缺失检测改为精确校验启动必需依赖 `@deepseek-ai/dsh-app-boot`；自动启用进入 `starting` 状态并提示「首次约 1-3 分钟」，安装失败明确回到停止态；npm install 失败自动重试 3 次。
+
 ## [2.2.2] - 2026-08-20
 
 ### 浏览器自动打开修复

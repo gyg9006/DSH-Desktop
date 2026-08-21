@@ -1,13 +1,13 @@
 <div align="center">
 
-# 🚀 DSH 桌面 v2.2.2
+# 🚀 DSH 桌面 v2.2.3
 
 **把 DeepSeek Harness（DSH 完整服务）装进一个桌面窗口 —— 客户端是入口壳，DSH 原生功能一个不少**
 
 > DeepSeek Harness（`@deepseek-ai/dsh`）的 Windows 桌面客户端
 > React + 赛博朋克 UI · 全中文界面 · 内嵌 DSH Web 完整服务（模型 / 会话 / API Key 原生管理）
 
-[![版本](https://img.shields.io/badge/版本-v2.2.2-1E2A78)](https://github.com/gyg9006/DSH-Desktop/releases)
+[![版本](https://img.shields.io/badge/版本-v2.2.3-1E2A78)](https://github.com/gyg9006/DSH-Desktop/releases)
 [![平台](https://img.shields.io/badge/平台-Windows%2010%2F11-lightgrey)]()
 [![React](https://img.shields.io/badge/React-19-61DAFB)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6)]()
@@ -16,9 +16,9 @@
 
 ## 📥 立即下载
 
-**👉 [GitHub Releases 下载 v2.2.2](https://github.com/gyg9006/DSH-Desktop/releases)**
+**👉 [GitHub Releases 下载 v2.2.3](https://github.com/gyg9006/DSH-Desktop/releases)**
 
-- 下载 `DSH-Desktop-v2.2.2-win.zip`，解压后双击 `DSH-Desktop.exe` 即可使用；
+- 下载 `DSH-Desktop-v2.2.3-win.zip`，解压后双击 `DSH-Desktop.exe` 即可使用；
 - 内置便携 Node / npm / pnpm / Git / dsh 运行环境，**电脑上什么都不用装**；
 - 首次启动两步引导（工作文件夹 → 环境检测），核心工作台内嵌 DSH 完整服务，**不自动打开外部浏览器**；
 - 支持应用内**非阻断更新**（24 小时缓存、语义化版本比较、仅启动时检查一次，Toast 提示不弹窗阻断）。
@@ -225,6 +225,7 @@ v2.1.5 起内置 Node 已随包携带 VC++ 运行库 DLL（vcruntime140 等）�
 | **v2.1.2~v2.1.9** | **加固与修复**：便携环境解压目录形态 + 三级解析、EXE 命名 ASCII 化 + 构建校验、引导可跳过、VC++ 运行库内置（LTSC 兼容）、API Key 保存即同步、日志卡片、端口 Tooltip、版本更新保护机制（feature-registry + 冒烟 + 回滚）、单实例锁残留修复、个性化配置快照保护 |
 | **v2.2** | **架构还原**：移除客户端重复的模型/API Key/会话实现，核心工作台内嵌 DSH 完整服务；引导精简为两步；设置移除「模型与 API」；服务健康检查、15 秒加载超时、崩溃恢复 |
 | **v2.2.1~v2.2.2** | **环境与更新修复**：更新检查改为 24 小时缓存、启动一次 + 手动检查、语义化版本比较、非阻断 Toast；工作区 env 安装状态与 PATH 注入框架；**DSH 强制 `--no-open` + webview 新窗口拦截，禁止自动打开外部浏览器** |
+| **v2.2.3** | **开箱即用**：dsh 依赖随包预装（解压即用，无需联网安装）；引导完成标记永久生效（升级不再重复弹引导）；dsh 依赖缺失精确检测 + 安装失败重试 3 次 + 自动启用进度反馈 |
 
 ---
 

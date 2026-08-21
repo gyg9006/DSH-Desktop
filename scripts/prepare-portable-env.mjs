@@ -297,7 +297,7 @@ if (!skip.has('pnpm')) {
   manifest.pnpm = { version: ver, dir: 'pnpm', exe: exeName, sha256: sha256Of(exePath) }
 }
 
-// ---- dsh（npm 包解压目录） ----
+// ---- dsh（npm 包解压目录 + 预装依赖，随包分发开箱即用） ----
 if (!skip.has('dsh')) {
   step('DeepSeek Harness (dsh)')
   const dshDir = path.join(outDir, 'dsh-cli')
@@ -324,6 +324,38 @@ if (!skip.has('dsh')) {
   if (!bin) throw new Error('dsh package.json 缺少 bin.dsh')
   const binPath = path.join(dshDir, bin)
   if (!fs.existsSync(binPath)) throw new Error(`dsh bin 不存在：${binPath}`)
+
+  // 预装 dsh 全部依赖（dependencies + devDependencies，核心功能在 devDependencies）。
+  // 让打包产物开箱即用：用户解压后 dsh 秒启，无需联网安装（修复依赖缺失导致的服务启动失败/超时）。
+  // 失败重试 3 次（网络慢/中断，如 esbuild 平台二进制下载超时）。
+  const needInstall = force || !fs.existsSync(path.join(dshDir, 'node_modules'))
+  if (needInstall) {
+    step(`  预装 dsh v${pkg.version} 依赖（${REGISTRY}，约需数分钟）…`)
+    const nodeDir = path.dirname(process.execPath)
+    const npmCli = path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')
+    if (!fs.existsSync(npmCli)) throw new Error(`未找到 npm-cli.js：${npmCli}`)
+    let installed = false
+    for (let attempt = 1; attempt <= 3 && !installed; attempt++) {
+      if (attempt > 1) console.log(`   第 ${attempt}/3 次重试 npm install…`)
+      const r = spawnSync(
+        process.execPath,
+        [npmCli, 'install', '--no-audit', '--no-fund', '--registry', REGISTRY, '--loglevel=error', '--progress=false'],
+        { encoding: 'utf8', cwd: dshDir, timeout: 1500000 }
+      )
+      if (r.status === 0) {
+        installed = true
+        break
+      }
+      console.log(`   npm install 失败（${(r.stderr || r.stdout || '').split('\n').slice(-3).join('\n')}）`)
+    }
+    if (!installed) throw new Error('dsh 依赖预装失败（已重试 3 次）')
+    // 校验启动必需依赖（bin.js 首行 import）
+    const critical = path.join(dshDir, 'node_modules', '@deepseek-ai', 'dsh-app-boot')
+    if (!fs.existsSync(critical)) throw new Error('dsh 依赖预装后缺少 @deepseek-ai/dsh-app-boot')
+    console.log('  依赖预装完成，@deepseek-ai/dsh-app-boot 校验通过')
+  } else {
+    console.log(`  依赖已就绪，跳过（node_modules 存在）`)
+  }
   console.log(`  校验通过：dsh v${pkg.version}（bin: ${bin}）`)
   manifest.dsh = { version: pkg.version, dir: 'dsh-cli', bin, ...(dshSha256 ? { sha256: dshSha256 } : {}) }
 }

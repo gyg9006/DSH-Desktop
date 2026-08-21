@@ -100,6 +100,18 @@ if (!fs.existsSync(envDir)) {
   if (dshOk) pass('dsh-cli/ 存在（package.json + version）', dshPkg)
   else fail('dsh-cli/ 存在（package.json + version）', dshPkg)
 
+  // dsh 依赖预装完整性（修复服务启动失败：依赖缺失 → 每次启动触发重装/超时）。
+  // bin.js 首行 import @deepseek-ai/dsh-app-boot，缺失则 dsh 秒退 ERR_MODULE_NOT_FOUND。
+  const dshAppBoot = path.join(envDir, 'dsh-cli', 'node_modules', '@deepseek-ai', 'dsh-app-boot')
+  const dshDepsCount = fs.existsSync(path.join(envDir, 'dsh-cli', 'node_modules'))
+    ? fs.readdirSync(path.join(envDir, 'dsh-cli', 'node_modules')).filter((n) => n !== '.package-lock.json').length
+    : 0
+  if (fs.existsSync(dshAppBoot)) {
+    pass('dsh-cli 依赖已预装（node_modules + @deepseek-ai/dsh-app-boot）', `顶层依赖目录 ${dshDepsCount} 个`)
+  } else {
+    fail('dsh-cli 依赖已预装（node_modules + @deepseek-ai/dsh-app-boot）', '缺失（用户首次启动需联网安装，服务无法 15 秒内拉起）')
+  }
+
   // env-manifest.json 有效性 + platform 匹配
   let manifestOk = false
   try {
